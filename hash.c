@@ -18,7 +18,8 @@ void debug(char msg[]) {
     printf("debug: %s\n", msg);
 }
 
-#define MAX_HASH_SIZE 100
+#define MIN_FIXED_FIELD_WIDTH 3
+#define MAX_HASH_SIZE 10
 #define HASH_KEY_TYPE int
 #define MAX_HASH_NAME_LENGTH 100
 
@@ -32,25 +33,73 @@ int hash_function (HASH_KEY_TYPE key) {
     return key % MAX_HASH_SIZE;
 }
 
+int collision_function(int position) {
+    int new_position;
+
+    new_position = position + 1;
+    if (new_position == MAX_HASH_SIZE) {
+        new_position = 0;
+    }
+
+    return new_position;
+}
+
 void hash_dump (struct HASH *h) {
-    printf("Dumping hash [%s]: ", h->name);
-    
     int num_keys = 0;
     int i;
 
-    for (i=0; i < MAX_HASH_SIZE; i++) {
-        if (h->used[i] == TRUE) {
-            num_keys++;
-            printf("\n  position [%d] used by key [%d]", i, h->keys[i]);
-        }
+    int longest_key = MIN_FIXED_FIELD_WIDTH;
+    int current_key;
+    char *tmp_str;
+    tmp_str = malloc(MAX_MSG_SIZE);
+
+    sprintf(tmp_str, "%d", (int) MAX_HASH_SIZE - 1);
+
+    current_key = strlen(tmp_str);
+    if (longest_key < current_key) {
+        longest_key = current_key;
     }
 
-    if (num_keys == 0) {
-        printf("empty hash\n");
+    // find longest key
+    for (i=0; i < MAX_HASH_SIZE; i++) {
+        if (h->used[i] == TRUE) {
+            sprintf(tmp_str, "%d", (int) h->keys[i]);
+            current_key = strlen(tmp_str);
+
+            if (longest_key < current_key) {
+                longest_key = current_key;
+            }
+        }
     }
-    else {
-        printf("\n  = %d keys\n", num_keys);
+    free(tmp_str);
+
+    printf("Dumping hash table [%s]:\n", h->name);
+    printf("    pos: ");
+    for (i=0; i < MAX_HASH_SIZE; i++)
+        printf("%0*d ", longest_key, i);
+    printf("\n");
+
+    printf("    u[]: ");
+    for (i=0; i < MAX_HASH_SIZE; i++) {
+        if (h->used[i] == TRUE) {
+            printf("%*d ", longest_key, TRUE);
+        }
+        else {
+            printf("%*d ", longest_key, FALSE);
+        }
     }
+    printf("\n");
+
+    printf("    k[]: ");
+    for (i=0; i < MAX_HASH_SIZE; i++) {
+        if (h->used[i] == TRUE) {
+            printf("%*d ", longest_key, h->keys[i]);
+        }
+        else {
+            printf("%-*s ", longest_key, " ");
+        }
+    }
+    printf("\n\n");
 }
 
 void hash_init (struct HASH *h, char name[]) {
@@ -83,10 +132,8 @@ bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
             return TRUE;
         }
 
-        i++;
-        if (i == MAX_HASH_SIZE) {
-            i = 0;
-        }
+        i = collision_function(i);
+
         if (i == kh) {
             if (DEBUG == TRUE) {
                 char *msg;
@@ -136,18 +183,13 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
                 free(msg);
             }
 
-            i++;
-            if (i == MAX_HASH_SIZE) {
-                i = 0;
-            }
+            i = collision_function(i);
 
             break;
         }
 
-        i++;
-        if (i == MAX_HASH_SIZE) {
-            i = 0;
-        }
+        i = collision_function(i);
+
         if (i == kh) {
             if (DEBUG == TRUE) {
                 char *msg;
@@ -183,10 +225,8 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             h->keys[hole] = 0;
         }
 
-        i++;
-        if (i == MAX_HASH_SIZE) {
-            i = 0;
-        }
+        i = collision_function(i);
+
         if (i == kh) {
             return TRUE;
         }
@@ -204,10 +244,8 @@ bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
             return TRUE;
         }
 
-        i++;
-        if (i == MAX_HASH_SIZE) {
-            i = 0;
-        }
+        i = collision_function(i);
+
         if (i == kh) {
             return FALSE;
         }
@@ -231,21 +269,41 @@ int main(int argc, char *argv[]) {
         die("error adding key");
     if (!hash_add(&h1, 16))
         die("error adding key");
-    
     hash_dump(&h1);
 
-    hash_remove(&h1, 24);
-    hash_remove(&h1, 14);
-    hash_remove(&h1, 24);
-    hash_add(&h1, 24);
+    if (!hash_add(&h1, 13))
+        die("error adding key");
+    if (!hash_add(&h1, 23))
+        die("error adding key");
     hash_dump(&h1);
 
-    int j;
-    for (j=1; j<101; j++) {
-        hash_add(&h1, rand() % 1000);
-    }
-
+    hash_remove(&h1, 13);
     hash_dump(&h1);
+
+    if (!hash_add(&h1, 99))
+        die("error adding key");
+    if (!hash_add(&h1, 199))
+        die("error adding key");
+    hash_dump(&h1);
+
+    if (!hash_add(&h1, 98))
+        die("error adding key");
+    if (!hash_add(&h1, 198))
+        die("error adding key");
+    hash_dump(&h1);
+
+    if (!hash_add(&h1, 7))
+        die("error adding key");
+    hash_dump(&h1);
+
+    hash_remove(&h1, 98);
+    hash_dump(&h1);
+
+//    int j;
+//    for (j=1; j<101; j++) {
+//        hash_add(&h1, rand() % 1000);
+//    }
+//    hash_dump(&h1);
 
     return 0;
 }
