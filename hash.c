@@ -195,7 +195,7 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
                 char *msg;
                 msg = malloc(MAX_MSG_SIZE);
                 sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-                debug(msg);
+                die(msg);
                 free(msg);
             }
 
@@ -208,7 +208,7 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             char *msg;
             msg = malloc(MAX_MSG_SIZE);
             sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-            debug(msg);
+            die(msg);
             free(msg);
         }
 
@@ -263,37 +263,27 @@ int main(int argc, char *argv[]) {
     hash_init(&h1, "test");
     hash_dump(&h1);
 
-    if (!hash_add(&h1, 14))
-        die("error adding key");
-    if (!hash_add(&h1, 15))
-        die("error adding key");
-    if (!hash_add(&h1, 16))
-        die("error adding key");
+    hash_add(&h1, 14);
+    hash_add(&h1, 15);
+    hash_add(&h1, 16);
     hash_dump(&h1);
 
-    if (!hash_add(&h1, 13))
-        die("error adding key");
-    if (!hash_add(&h1, 23))
-        die("error adding key");
+    hash_add(&h1, 13);
+    hash_add(&h1, 23);
     hash_dump(&h1);
 
     hash_remove(&h1, 13);
     hash_dump(&h1);
 
-    if (!hash_add(&h1, 99))
-        die("error adding key");
-    if (!hash_add(&h1, 199))
-        die("error adding key");
+    hash_add(&h1, 99);
+    hash_add(&h1, 199);
     hash_dump(&h1);
 
-    if (!hash_add(&h1, 98))
-        die("error adding key");
-    if (!hash_add(&h1, 198))
-        die("error adding key");
+    hash_add(&h1, 98);
+    hash_add(&h1, 198);
     hash_dump(&h1);
 
-    if (!hash_add(&h1, 7))
-        die("error adding key");
+    hash_add(&h1, 7);
     hash_dump(&h1);
 
     hash_remove(&h1, 98);
