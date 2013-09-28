@@ -33,7 +33,7 @@ int hash_function (HASH_KEY_TYPE key) {
     return key % MAX_HASH_SIZE;
 }
 
-int collision_function(int position) {
+int next_by_clock (int position) {
     int new_position;
 
     new_position = position + 1;
@@ -73,7 +73,7 @@ void hash_dump (struct HASH *h) {
     }
     free(tmp_str);
 
-    printf("Dumping hash table [%s]:\n", h->name);
+    printf("\nDumping hash table [%s]:\n", h->name);
     printf("    pos: ");
     for (i=0; i < MAX_HASH_SIZE; i++)
         printf("%0*d ", longest_key, i);
@@ -132,7 +132,7 @@ bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
             return TRUE;
         }
 
-        i = collision_function(i);
+        i = next_by_clock(i);
 
         if (i == kh) {
             if (DEBUG == TRUE) {
@@ -183,19 +183,19 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
                 free(msg);
             }
 
-            i = collision_function(i);
+            i = next_by_clock(i);
 
             break;
         }
 
-        i = collision_function(i);
+        i = next_by_clock(i);
 
         if (i == kh) {
             if (DEBUG == TRUE) {
                 char *msg;
                 msg = malloc(MAX_MSG_SIZE);
                 sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-                die(msg);
+                debug(msg);
                 free(msg);
             }
 
@@ -208,7 +208,7 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             char *msg;
             msg = malloc(MAX_MSG_SIZE);
             sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-            die(msg);
+            debug(msg);
             free(msg);
         }
 
@@ -216,7 +216,12 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
     }
 
     while (h->used[i] == TRUE) {
-        if (hash_function(h->keys[i]) == hole) {
+        if (hash_function(h->keys[i]) == i) {
+        }
+        else if (
+            (i - hash_function(h->keys[i]) + MAX_HASH_SIZE) % MAX_HASH_SIZE >=
+            (i - hole + MAX_HASH_SIZE) % MAX_HASH_SIZE
+            ) {
             h->used[hole] = TRUE;
             h->keys[hole] = h->keys[i];
 
@@ -225,7 +230,7 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             h->keys[hole] = 0;
         }
 
-        i = collision_function(i);
+        i = next_by_clock(i);
 
         if (i == kh) {
             return TRUE;
@@ -244,7 +249,7 @@ bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
             return TRUE;
         }
 
-        i = collision_function(i);
+        i = next_by_clock(i);
 
         if (i == kh) {
             return FALSE;
@@ -254,46 +259,175 @@ bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
     return FALSE;
 }
 
+bool hash_equal (struct HASH *h1, struct HASH *h2) {
+    int i = 0;
+
+    while (i < MAX_HASH_SIZE) {
+        if (h1->used[i] == h2->used[i]) {
+            if (h1->used[i] == TRUE) {
+                if (h1->keys[i] != h2->keys[i]) {
+                    return FALSE;
+                }
+            }
+        }
+        else {
+            return FALSE;
+        }
+        i++;
+    }
+
+    return TRUE;
+}
+
+// unit tests for hash
+bool hash_test() {
+    struct HASH h1;
+    struct HASH h2;
+
+    hash_init(&h1, "actual");
+    hash_init(&h2, "expected");
+
+    hash_add(&h1, 9);
+    hash_add(&h1, 19);
+    hash_remove(&h1, 9);
+
+    hash_add(&h2, 19);
+
+    if (hash_equal(&h1, &h2) != TRUE) {
+        printf("failed!\n");
+        hash_dump(&h2);
+        hash_dump(&h1);
+        return FALSE;
+    }
+
+    hash_init(&h1, "actual");
+    hash_init(&h2, "expected");
+
+    hash_add(&h1, 3);
+    hash_add(&h1, 4);
+    hash_add(&h1, 13);
+    hash_add(&h1, 5);
+    hash_add(&h1, 14);
+    hash_remove(&h1, 3);
+
+    hash_add(&h2, 13);
+    hash_add(&h2, 4);
+    hash_add(&h2, 5);
+    hash_add(&h2, 14);
+
+    if (hash_equal(&h1, &h2) != TRUE) {
+        printf("failed!\n");
+        hash_dump(&h2);
+        hash_dump(&h1);
+        return FALSE;
+    }
+
+
+    hash_init(&h1, "actual");
+    hash_init(&h2, "expected");
+
+    hash_add(&h1, 3);
+    hash_add(&h1, 4);
+    hash_add(&h1, 5);
+    hash_add(&h1, 6);
+    hash_add(&h1, 44);
+    hash_add(&h1, 8);
+    hash_add(&h1, 33);
+    hash_remove(&h1, 4);
+
+    hash_add(&h2, 3);
+    hash_add(&h2, 5);
+    hash_add(&h2, 6);
+    hash_add(&h2, 44);
+    hash_add(&h2, 8);
+    hash_add(&h2, 33);
+
+    if (hash_equal(&h1, &h2) != TRUE) {
+        printf("failed!\n");
+        hash_dump(&h2);
+        hash_dump(&h1);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+bool readcmd(char cmd[]) {
+    int i,c;
+    int done=0;
+
+    printf("[a]dd N, [r]emove N, [p]rint, [q]uit: ");
+    for (i=0; done == 0; i++) {
+        if (i < MAX_MSG_SIZE - 1) {
+            if ( (c = getchar()) != '\n') {
+                if (c == EOF) {
+                    cmd[i] = 'q';
+                    i++;
+                }
+                else {
+                    cmd[i] = c;
+                    continue;
+                }
+            }
+        }
+
+        // exit
+        done = 1;
+    }
+    cmd[i - 1] = 0;
+
+    return TRUE;
+}
+
 int main(int argc, char *argv[]) {
     struct HASH h1;
+
     bool res;
 
+    if (argc == 2 && strcmp("test", argv[1]) == 0) {
+        if (hash_test() == TRUE) {
+            printf("tests passed\n");
+            return 0;
+        }
+        else {
+            return 1;
+        }
+    }
+
     if (argc > 1) DEBUG=TRUE;
+
+    char cmd[MAX_MSG_SIZE] = "";
+    char cmd_short[MAX_MSG_SIZE] = "";
+    int key;
 
     hash_init(&h1, "test");
     hash_dump(&h1);
 
-    hash_add(&h1, 14);
-    hash_add(&h1, 15);
-    hash_add(&h1, 16);
-    hash_dump(&h1);
+    while (readcmd(cmd)) {
+//        printf("got [%s]\n", cmd);
+        if (strcmp(cmd, "q") == 0) {
+            printf("bye\n");
+            break;
+        }
 
-    hash_add(&h1, 13);
-    hash_add(&h1, 23);
-    hash_dump(&h1);
+        if (strstr(cmd, "a") == &cmd[0] || strstr(cmd, "r") == &cmd[0]) {
+            if (sscanf(cmd, "%s %d", cmd_short, &key) != 2) {
+                printf("invalid command");
+                continue;
+            }
+//        printf("got: [%s] [%d]\n", cmd_short, key);
+            printf("\n");
 
-    hash_remove(&h1, 13);
-    hash_dump(&h1);
+            if (strcmp(cmd_short, "a") == 0) {
+                hash_add(&h1, key);
+            }
+            if (strcmp(cmd_short, "r") == 0) {
+                hash_remove(&h1, key);
+            }
+        }
 
-    hash_add(&h1, 99);
-    hash_add(&h1, 199);
-    hash_dump(&h1);
-
-    hash_add(&h1, 98);
-    hash_add(&h1, 198);
-    hash_dump(&h1);
-
-    hash_add(&h1, 7);
-    hash_dump(&h1);
-
-    hash_remove(&h1, 98);
-    hash_dump(&h1);
-
-//    int j;
-//    for (j=1; j<101; j++) {
-//        hash_add(&h1, rand() % 1000);
-//    }
-//    hash_dump(&h1);
+        hash_dump(&h1);
+    }
 
     return 0;
 }
