@@ -1,30 +1,18 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+// hashmap implementation as described in Shen's book
+// "Programming: theorems and excercises"
+//
+// colliding keys are stored in the same array as other keys,
+// they are not grouped into linked list array (buckets)
+//
 
-#define MAX_MSG_SIZE 1024
-
-typedef short int bool;
-#define TRUE 1
-#define FALSE 0
-
-bool DEBUG = FALSE;
-
-void die (char msg[]) {
-    printf("fatal error: %s\n", msg);
-    exit(1);
-}
-void debug(char msg[]) {
-    printf("debug: %s\n", msg);
-}
+#include "mystd.h"
 
 #define MIN_FIXED_FIELD_WIDTH 3
 #define MAX_HASH_SIZE 10
 #define HASH_KEY_TYPE int
-#define MAX_HASH_NAME_LENGTH 100
 
 struct HASH {
-    char name[MAX_HASH_NAME_LENGTH];
+    char name[STRUCT_NAME_LENGTH];
     bool used[MAX_HASH_SIZE];
     HASH_KEY_TYPE keys[MAX_HASH_SIZE];
 };
@@ -45,7 +33,6 @@ int next_by_clock (int position) {
 }
 
 void hash_dump (struct HASH *h) {
-    int num_keys = 0;
     int i;
 
     int longest_key = MIN_FIXED_FIELD_WIDTH;
@@ -106,10 +93,10 @@ void hash_init (struct HASH *h, char name[]) {
     if (strlen(name) < 1) {
         die("hash_init: need hash name");
     }
-    else if (strlen(name) > MAX_HASH_NAME_LENGTH) {
+    else if (strlen(name) > STRUCT_NAME_LENGTH) {
         char *msg;
         msg = malloc(MAX_MSG_SIZE);
-        sprintf(msg, "hash_init: hash name must be no longer than %d", MAX_HASH_NAME_LENGTH);
+        sprintf(msg, "hash_init: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
         die(msg);
         free(msg);
     }
@@ -174,14 +161,6 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             hole = i;
             h->used[hole] = FALSE;
             h->keys[hole] = 0;
-    
-            if (DEBUG == TRUE) {
-                char *msg;
-                msg = malloc(MAX_MSG_SIZE);
-                sprintf(msg, "[%s] hash_remove: removed key [%d]", h->name, key);
-                debug(msg);
-                free(msg);
-            }
 
             i = next_by_clock(i);
 
@@ -191,27 +170,11 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
         i = next_by_clock(i);
 
         if (i == kh) {
-            if (DEBUG == TRUE) {
-                char *msg;
-                msg = malloc(MAX_MSG_SIZE);
-                sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-                debug(msg);
-                free(msg);
-            }
-
             return FALSE;
         }
     }
 
     if (found_key == FALSE) {
-        if (DEBUG == TRUE) {
-            char *msg;
-            msg = malloc(MAX_MSG_SIZE);
-            sprintf(msg, "[%s] hash_remove: unable to remove key [%d], it's not in hash", h->name, key);
-            debug(msg);
-            free(msg);
-        }
-
         return FALSE;
     }
 
@@ -352,37 +315,8 @@ bool hash_test() {
     return TRUE;
 }
 
-bool readcmd(char cmd[]) {
-    int i,c;
-    int done=0;
-
-    printf("[a]dd N, [r]emove N, [p]rint, [q]uit: ");
-    for (i=0; done == 0; i++) {
-        if (i < MAX_MSG_SIZE - 1) {
-            if ( (c = getchar()) != '\n') {
-                if (c == EOF) {
-                    cmd[i] = 'q';
-                    i++;
-                }
-                else {
-                    cmd[i] = c;
-                    continue;
-                }
-            }
-        }
-
-        // exit
-        done = 1;
-    }
-    cmd[i - 1] = 0;
-
-    return TRUE;
-}
-
 int main(int argc, char *argv[]) {
     struct HASH h1;
-
-    bool res;
 
     if (argc == 2 && strcmp("test", argv[1]) == 0) {
         if (hash_test() == TRUE) {
@@ -403,7 +337,7 @@ int main(int argc, char *argv[]) {
     hash_init(&h1, "test");
     hash_dump(&h1);
 
-    while (readcmd(cmd)) {
+    while (readcmd("[a]dd N, [r]emove N, [p]rint, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             printf("bye\n");
@@ -412,7 +346,7 @@ int main(int argc, char *argv[]) {
 
         if (strstr(cmd, "a") == &cmd[0] || strstr(cmd, "r") == &cmd[0]) {
             if (sscanf(cmd, "%s %d", cmd_short, &key) != 2) {
-                printf("invalid command");
+                printf("invalid command: %s\n", cmd);
                 continue;
             }
 //        printf("got: [%s] [%d]\n", cmd_short, key);
