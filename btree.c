@@ -1,9 +1,17 @@
+//
+// b-tree implementation as described in Introduction to Algorithms, 3rd edition
+//
+// b-tree nodes storage uses static memory, size of which along with the
+// branching factor of b-tree is configured at compile time for now
+// (should switch to dynamic memory allocation to get ready for production)
+//
+
 #include "mystd.h"
 
 // the size of nodes storage
 #define BTREE_MAX_NODES 999
 
-#define BTREE_T 3
+#define BTREE_T 2
 #define BTREE_MIN_KEYS_IN_NODE (BTREE_T - 1)
 #define BTREE_MAX_KEYS_IN_NODE (2 * BTREE_T - 1)
 #define BTREE_MAX_CHILDREN_FOR_NODE (2 * BTREE_T)
@@ -13,7 +21,7 @@ typedef struct __type_btree_node {
     // id of the node matching its number if global BTREE nodes storage
     int id;
 
-    // number of keys currently stored in the node
+    // number of keys currently stored in the node; 1-based
     int n;
 
     // keys stored in the node
@@ -35,6 +43,7 @@ typedef struct __type_btree_node {
 typedef struct __type_btree {
     char name[STRUCT_NAME_LENGTH];
     btree_node *root;
+    int height;
 } btree;
 
 // global nodes storage so we don't have
@@ -47,6 +56,11 @@ bool BTREE_NODES_USED[BTREE_MAX_NODES];
 // position (pointer, not in C terms) in the nodes storage
 // to the first free node which could be used (allocated)
 int BTREE_NODES_LAST_USED = 0;
+
+// forward declarations
+void btree_init(btree *t, char *name);
+void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key);
+void btree_split_child(btree_node *parent_node, int child_to_split_number);
 
 // returns pointer to the free (unused) node which can be used
 btree_node *allocate_node() {
@@ -79,7 +93,8 @@ btree_node *allocate_node() {
 }
 
 void free_node(btree_node *n) {
-    // fill up the space which is going to free with the last used node
+    // fill up the space which is being freed in the global nodes array
+    // by the last allocated node (copy it into the freed space)
     if (BTREE_NODES_LAST_USED > 1) {
         // copy the last node to the free space
         BTREE_NODES[n->id] = BTREE_NODES[BTREE_NODES_LAST_USED - 1];
@@ -91,6 +106,7 @@ void free_node(btree_node *n) {
     // not updating any of the copied node elements, since
     // they all will be updated upon initialization in allocate_node()
     BTREE_NODES_LAST_USED--;
+
     return;
 }
 
@@ -108,6 +124,49 @@ void dump_node_storage() {
         i++;
     }
     printf("\n");
+}
+
+void btree_node_dump(btree_node *x) {
+    int i;
+    printf(" ");
+    for(i=0; i < x->n; i++) {
+        printf("%d", x->keys[i]);
+        if (i < x->n - 1) {
+            printf("_");
+        }
+    }
+}
+
+int btree_print_nodes_by_level (btree_node *x, int required_level, int current_level) {
+    int i;
+
+    if (required_level == current_level) {
+        btree_node_dump(x);
+        return 1;
+    }
+    
+    int nodes_printed = 0;
+    for (i = 0; i <= x->n; i++) {
+        nodes_printed = nodes_printed + btree_print_nodes_by_level(x->children[i], required_level, current_level + 1);
+    }
+    return nodes_printed;
+}
+
+void btree_dump(btree *tree) {
+    printf("\nDumping btree [%s]:\n", tree->name);
+
+    btree_node *x;
+    x = tree->root;
+
+    int j = 1;
+
+    for (j = 1; j <= tree->height; j++) {
+        printf("h %d: ", j);
+        btree_print_nodes_by_level(x, j, 1);
+        printf("\n");
+    }
+
+    printf("\n\n");
 }
 
 void btree_init(btree *t, char *name) {
@@ -128,40 +187,218 @@ void btree_init(btree *t, char *name) {
     t->root->leaf = true;
     t->root->root = true;
 
+    t->height = 1;
+
     return;
 }
 
-void btree_split_child(btree_node *t, int child_number) {
-}
+// insert the key into the node
+//
+// functions assumes that:
+//
+//    * the node contains no more than 2t-1 keys (which is guaranteed
+//      by the btree_split_child() run before btree_insert_nonfull()
+//
+//    * the key being insert is not present in the tree which is easily
+//      solved for 1 CPU by doing (fast) btree_search before running
+//      btree_insert() but might become a problem if the tree
+//      is written simultaneously by several CPU(s)
+//
+void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key) {
+    int i;
 
-void btree_insert_nonfull(btree_node *t, BTREE_KEY_TYPE k) {
-}
+    i = node->n;
 
-void btree_insert(btree *t, BTREE_KEY_TYPE k) {
-    btree_node *r;
-    r = t->root;
+    if (node->leaf == true) {
+        // shift all the keys right by one position
+        // to prepare space for the key which is being inserted
+        while (i >= 1 && key < node->keys[(i) - 1]) {
+            node->keys[(i + 1) - 1] = node->keys[(i) - 1];
+            node->keys_used[(i + 1) - 1] = true;
+            i--;
+        }
 
-    if (r->n == BTREE_MAX_KEYS_IN_NODE) {
-        btree_node *s;
-        s = allocate_node();
-        t->root = s;
-        s->leaf = false;
-        s->children[0] = r;
+        // insert the key into prepared position
+        node->keys[(i + 1) - 1] = key;
 
+        // increment number of keys in the node
+        node->n = node->n + 1;
+    
+        // write node to the disk
     }
     else {
-        btree_insert_nonfull(t->root, k);
+        // find the child which holds the key
+        while (i >= 1 && key < node->keys[(i) - 1]) {
+            i = i - 1;
+        }
+        i = i + 1;
+        
+        // read child from disk
+
+        if (node->children[(i) - 1]->n == BTREE_MAX_KEYS_IN_NODE) {
+            btree_split_child(node, (i) - 1);
+           
+            if (key > node->keys[(i) - 1]) {
+                i = i + 1;
+            }
+        }
+
+        btree_insert_nonfull(node->children[(i) - 1], key); 
     }
+}
+
+// split node which contains 2t-1 keys into two nodes
+// with t-1 keys each and pop one key up to the parent_node
+// (t-1) + (t-1) + 1 == 2t - 2 + 1 == 2t - 1
+//
+// note: child_number is 0-based (as opposed to the book notation),
+// so it is adjusted by 1 in the code (I'm using parenthesis
+// to separate algorithm logic from 0-based adjustment)
+// 
+void btree_split_child(btree_node *parent_node, int child_to_split_number) {
+    btree_node *z, *y;
+
+    y = parent_node->children[child_to_split_number];
+
+    z = allocate_node();
+    z->leaf = y->leaf;
+
+    // copy the keys starting with t+1 (human) from y to z
+    // and also the children pointers (if they exist)
+    //
+    // C     0    1    2    3    4
+    // human 1    2    3    4    5
+    //
+    //       t-1  t    2t-2 2t-1 2t
+    //       2    3    4    5    6
+    //
+    int j;
+    int i;
+    for (j = (1) - 1; j <= (BTREE_T - 1) - 1; j++) {
+        
+        // position of the element to be copied from y to z
+        // (j=0 => i=BTREE_T which is 0-based t+1 (t+1-1) 
+        i = j + BTREE_T;
+
+        z->keys[j] = y->keys[i];
+        z->keys_used[j] = true;
+        y->keys_used[i] = false;
+
+        if (y->leaf == false) {
+            z->children[j] = y->children[i];
+        }
+    }
+    // there's one more child
+    if (y->leaf == false) {
+        // j == BTREE_T - 1 (which is 0-based equiv for 1-based t)
+        // i == 2t - 1, which is 0-based equiv for (2t-1)+1 -- (2t-1+1-1)
+        i = j + BTREE_T;
+        z->children[j] = y->children[i];
+    }
+
+    z->n = BTREE_T - 1; // 1-based
+    y->n = BTREE_T - 1; // 1-based
+
+    // prepare space for the new key (which is about to pop up)
+    // in the parent by shifting its keys and children one to the right
+    for (j = (parent_node->n) - 1; j >= child_to_split_number; j--) {
+        parent_node->keys[j + 1] = parent_node->keys[j];
+        parent_node->keys_used[j + 1] = true;
+        parent_node->children[(j + 1) + 1] = parent_node->children[(j) + 1];
+    }
+    // insert new key into parent_node->keys in place of moved key
+    parent_node->keys[child_to_split_number] = y->keys[(BTREE_T) - 1];
+    
+    // insert pointer to z into the parent_node->children
+    parent_node->children[child_to_split_number + 1] = z;
+    
+    // new key (and new child) inserted, increment number of keys in the node
+    parent_node->n = parent_node->n + 1;
+
+    // write y to the disk
+    // write z to the disk
+    // write parent_node to the disk
+
+    return;
+}
+
+// this is the main function to insert a key into the btree
+//
+void btree_insert(btree *tree, BTREE_KEY_TYPE key) {
+    btree_node *r;
+    r = tree->root;
+
+    if (r->n == BTREE_MAX_KEYS_IN_NODE) {
+        // the tree is going to grow, the old root is no longer theroot
+        r->root = false;
+
+        // prepare new root
+        btree_node *s;
+        s = allocate_node();
+        s->leaf = false;
+        s->root = true;
+        
+        // make old root the first (and the only child for now) of the new root
+        s->children[0] = r;
+
+        // update the root node pointer in the tree object
+        tree->root = s;
+
+        tree->height = tree->height + 1;
+        
+        // this will split the old root into two internal nodes
+        btree_split_child(s, 0);
+
+        // now we can continue inserting the key into btree
+        btree_insert_nonfull(tree->root, key);
+    }
+    else {
+        // the root doesn't have to grow (less than 2t-1 keys in it),
+        // so simply insert the key
+        btree_insert_nonfull(tree->root, key);
+    }
+}
+
+bool btree_equal(btree *t1, btree *t2) {
+    return true;
+}
+
+bool btree_test() {
+    btree t1;
+    btree t2;
+
+    btree_init(&t1, "actual");
+    btree_init(&t2, "expected");
+
+    btree_insert(&t1, 1);
+    btree_insert(&t1, 10);
+    btree_insert(&t1, 1000);
+    btree_insert(&t1, 50);
+    btree_insert(&t1, 3);
+    btree_insert(&t1, 15);
+
+    return true;
 }
 
 int main(int argc, char *argv[]) {
+    if (argc == 2 && strcmp("test", argv[1]) == 0) {
+        if (btree_test() == TRUE) {
+            printf("tests passed\n");
+            return 0;
+        }
+        else {
+            return 1;
+        }
+    }
+
     btree t;
 
     btree_init(&t, "tree 1");
+    btree_dump(&t);
 
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
-    int key;
+    BTREE_KEY_TYPE key;
 
     while (readcmd("[a]dd N, [r]emove N, [p]rint, [d]ump node storage, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
@@ -182,14 +419,14 @@ int main(int argc, char *argv[]) {
             printf("\n");
 
             if (strcmp(cmd_short, "a") == 0) {
-//                hash_add(&h1, key);
+                btree_insert(&t, key);
             }
             if (strcmp(cmd_short, "r") == 0) {
 //                hash_remove(&h1, key);
             }
         }
 
-//        hash_dump(&h1);
+        btree_dump(&t);
     }
     
     return 0;

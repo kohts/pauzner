@@ -316,8 +316,6 @@ bool hash_test() {
 }
 
 int main(int argc, char *argv[]) {
-    struct HASH h1;
-
     if (argc == 2 && strcmp("test", argv[1]) == 0) {
         if (hash_test() == TRUE) {
             printf("tests passed\n");
@@ -328,11 +326,13 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    struct HASH h1;
+
     if (argc > 1) DEBUG=TRUE;
 
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
-    int key;
+    HASH_KEY_TYPE key;
 
     hash_init(&h1, "test");
     hash_dump(&h1);
