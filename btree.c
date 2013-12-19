@@ -7,6 +7,7 @@
 //
 
 #include "mystd.h"
+#include <math.h>
 
 // the size of nodes storage
 #define BTREE_MAX_NODES 999
@@ -18,7 +19,7 @@
 #define BTREE_KEY_TYPE int
 
 typedef struct __type_btree_node {
-    // id of the node matching its number if global BTREE nodes storage
+    // id of the node matching its number in global BTREE nodes storage
     int id;
 
     // number of keys currently stored in the node; 1-based
@@ -46,6 +47,11 @@ typedef struct __type_btree {
     int height;
 } btree;
 
+typedef struct __type_btree_search_result {
+    btree_node *node;
+    int matching_key_index;
+} btree_search_result;
+
 // global nodes storage so we don't have
 // to allocate memory in runtime
 btree_node BTREE_NODES[BTREE_MAX_NODES];
@@ -61,6 +67,8 @@ int BTREE_NODES_LAST_USED = 0;
 void btree_init(btree *t, char *name);
 void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key);
 void btree_split_child(btree_node *parent_node, int child_to_split_number);
+btree_search_result *btree_search(btree *, BTREE_KEY_TYPE, btree_search_result *);
+btree_search_result *btree_search_node(btree_node *, BTREE_KEY_TYPE, btree_search_result *);
 
 // returns pointer to the free (unused) node which can be used
 btree_node *allocate_node() {
@@ -81,7 +89,7 @@ btree_node *allocate_node() {
 
     int j = 0;
     while(j < BTREE_MAX_KEYS_IN_NODE) {
-        BTREE_NODES[i].keys_used[j] = 0;
+        BTREE_NODES[i].keys[j] = 0;
         BTREE_NODES[i].keys_used[j] = false;
         BTREE_NODES[i].children[j] = NULL;
         j++;
@@ -126,33 +134,39 @@ void dump_node_storage() {
     printf("\n");
 }
 
-void btree_node_dump(btree_node *x) {
-    int i;
+void btree_node_dump(btree_node *x, bool print_node_id) {
     printf(" ");
+    
+    if (print_node_id == true) {
+        printf("node%d:", x->id);
+    }
+
+    int i;
     for(i=0; i < x->n; i++) {
         printf("%d", x->keys[i]);
+//        printf("%d (%s)", x->keys[i], (x->keys_used[i] == true ? "y" : "n"));
         if (i < x->n - 1) {
             printf("_");
         }
     }
 }
 
-int btree_print_nodes_by_level (btree_node *x, int required_level, int current_level) {
+int btree_print_nodes_by_level (btree_node *x, int required_level, int current_level, bool print_node_id) {
     int i;
 
     if (required_level == current_level) {
-        btree_node_dump(x);
+        btree_node_dump(x, print_node_id);
         return 1;
     }
     
     int nodes_printed = 0;
     for (i = 0; i <= x->n; i++) {
-        nodes_printed = nodes_printed + btree_print_nodes_by_level(x->children[i], required_level, current_level + 1);
+        nodes_printed = nodes_printed + btree_print_nodes_by_level(x->children[i], required_level, current_level + 1, print_node_id);
     }
     return nodes_printed;
 }
 
-void btree_dump(btree *tree) {
+void btree_dump(btree *tree, bool print_node_id) {
     printf("\nDumping btree [%s]:\n", tree->name);
 
     btree_node *x;
@@ -162,7 +176,7 @@ void btree_dump(btree *tree) {
 
     for (j = 1; j <= tree->height; j++) {
         printf("h %d: ", j);
-        btree_print_nodes_by_level(x, j, 1);
+        btree_print_nodes_by_level(x, j, 1, print_node_id);
         printf("\n");
     }
 
@@ -220,6 +234,7 @@ void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key) {
 
         // insert the key into prepared position
         node->keys[(i + 1) - 1] = key;
+        node->keys_used[(i + 1) - 1] = true;
 
         // increment number of keys in the node
         node->n = node->n + 1;
@@ -308,6 +323,7 @@ void btree_split_child(btree_node *parent_node, int child_to_split_number) {
     }
     // insert new key into parent_node->keys in place of moved key
     parent_node->keys[child_to_split_number] = y->keys[(BTREE_T) - 1];
+    parent_node->keys_used[child_to_split_number] = true;
     
     // insert pointer to z into the parent_node->children
     parent_node->children[child_to_split_number + 1] = z;
@@ -325,6 +341,15 @@ void btree_split_child(btree_node *parent_node, int child_to_split_number) {
 // this is the main function to insert a key into the btree
 //
 void btree_insert(btree *tree, BTREE_KEY_TYPE key) {
+    btree_search_result *presult;
+    btree_search_result result;
+
+    presult = btree_search(tree, key, &result);
+    if (presult != NULL) {
+        printf("key [%d] already exists in the tree (node %d), unable to insert\n", key, presult->node->id);
+        return;
+    }
+
     btree_node *r;
     r = tree->root;
 
@@ -357,6 +382,109 @@ void btree_insert(btree *tree, BTREE_KEY_TYPE key) {
         // so simply insert the key
         btree_insert_nonfull(tree->root, key);
     }
+}
+
+btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btree_search_result *result) {
+    int left_boundary = 0;
+    int right_boundary = BTREE_MAX_KEYS_IN_NODE - 1;
+    int center;
+
+    bool found_key = false;
+    bool found_key_position;
+    bool done_searching = false;
+
+    while(done_searching != true) {
+        if (node->keys_used[left_boundary] == false) {
+            done_searching = true;
+            continue;
+        }
+
+        //   left right (right-left)/5 center
+        //   0    1     0.5            1
+        // b 0    1     0.5            1 
+        // c 1    1     0              1
+        //
+        //   0    2     1              1
+        // b 0    1
+        // c 1    2     1              2
+        //
+        //   0    3     1.5            2
+        // b 0    2
+        // c 2    3     0.5            3
+        // 
+        //   1    2     0.5            2
+        // b 1    1
+        // c 2    2
+        //
+        center = left_boundary + round((right_boundary - left_boundary) / 2);
+
+//        printf("%d <-- %d --> %d\n", left_boundary, center, right_boundary);
+
+        if (node->keys_used[center] == false) {
+            right_boundary = center - 1;
+            continue;
+        }
+
+        // a, b and c cover all the possible cases
+        
+        // a
+        if (node->keys[center] == key) {
+            found_key = true;
+            found_key_position = center;
+            done_searching = true;
+            continue;
+        }
+        
+        // d: left_boundary == right_boundary == center
+        if (left_boundary == right_boundary) {
+            if (node->leaf == true) {
+                done_searching = true;
+                continue;
+            }
+            else {
+                if (key < node->keys[center]) {
+                    return btree_search_node(node->children[center], key, result);
+                }
+                if (node->keys[center] < key) {
+                    return btree_search_node(node->children[center + 1], key, result);
+                }
+
+                die("btree_search_node: something is very wrong; left %d, right %d, center %d, node id %d");
+//                die("btree_search_node: something is very wrong; left %d, right %d, center %d, node id %d", left_boundary, right_boundary, center, node->id);
+            }
+        }
+        
+        // b
+        if (key < node->keys[center]) {
+            right_boundary = center - 1;
+            continue;
+        }
+
+        // c
+        if (node->keys[center] < key) {
+            left_boundary = center + 1;
+            continue;
+        }
+
+        die("btree_search_node: binary_search has an error; left %d, right %d, center %d, node id %d");
+    }
+
+    if (found_key == true) {
+        result->node = node;
+        result->matching_key_index = found_key_position;
+        return result;
+    }
+    else {
+        return NULL;
+    }
+}
+
+// takes btree and returns either NULL when key is not present in the btree
+// or struct which holds the node pointer and index of the key
+// in the result->node->keys array
+//
+btree_search_result *btree_search(btree *t, BTREE_KEY_TYPE key, btree_search_result *result) {
+    return btree_search_node(t->root, key, result);
 }
 
 bool btree_equal(btree *t1, btree *t2) {
@@ -392,9 +520,11 @@ int main(int argc, char *argv[]) {
     }
 
     btree t;
+    btree_search_result *presult;
+    btree_search_result result;
 
     btree_init(&t, "tree 1");
-    btree_dump(&t);
+    btree_dump(&t, false);
 
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
@@ -408,9 +538,15 @@ int main(int argc, char *argv[]) {
         }
         if (strcmp(cmd, "d") == 0) {
             dump_node_storage();
+            btree_dump(&t, true);
+            continue;
         }
 
-        if (strstr(cmd, "a") == &cmd[0] || strstr(cmd, "r") == &cmd[0]) {
+        if (
+            strstr(cmd, "a") == &cmd[0] ||
+            strstr(cmd, "r") == &cmd[0] ||
+            strstr(cmd, "s") == &cmd[0]
+            ) {
             if (sscanf(cmd, "%s %d", cmd_short, &key) != 2) {
                 printf("invalid command: %s\n", cmd);
                 continue;
@@ -424,9 +560,20 @@ int main(int argc, char *argv[]) {
             if (strcmp(cmd_short, "r") == 0) {
 //                hash_remove(&h1, key);
             }
+            if (strcmp(cmd_short, "s") == 0) {
+                presult = btree_search(&t, key, &result);
+                if (presult != NULL) {
+                    printf("found key [%d], node [%d]!\n", key, presult->node->id);
+                }
+                else {
+                    printf("key [%d] not found in the tree!\n", key);
+                }
+                btree_dump(&t, true);
+                continue;
+            }
         }
 
-        btree_dump(&t);
+        btree_dump(&t, false);
     }
     
     return 0;

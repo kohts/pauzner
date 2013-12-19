@@ -1,4 +1,4 @@
 hash: hash.c
 	gcc -Wall hash.c -o ../hash && ../hash
 btree: btree.c
-	gcc -Wall btree.c -o ../btree && ../btree
+	gcc -Wall btree.c -lm -o ../btree && ../btree
