@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef short int boolean;
 typedef short int bool;
 #define TRUE 1
 #define true 1
@@ -9,11 +10,13 @@ typedef short int bool;
 #define false 0
 
 // global debugging mode
-bool DEBUG = FALSE;
+boolean DEBUG = FALSE;
 
 // internal names of structs, kind of debugging
 #define STRUCT_NAME_LENGTH 100
 
+// TODO: make die accept variable list of parameters
+// suitable to be used in printf; man stdarg
 void die (char msg[]) {
     fprintf(stderr, "fatal error: %s\n", msg);
     exit(1);
