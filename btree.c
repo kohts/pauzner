@@ -395,8 +395,22 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
 
     while(done_searching != true) {
         if (node->keys_used[left_boundary] == false) {
-            done_searching = true;
-            continue;
+            if (node->leaf == true) {
+                done_searching = true;
+                continue;
+            }
+            else {
+                if (left_boundary > 0) {
+                    // left boundary moved to center + 1 on the previous cycle,
+                    // but it's not set (while previous center was), since it's
+                    // not the leaf - descend into previous center "right" child
+                    return btree_search_node(node->children[left_boundary], key, result);
+                }
+                else {
+                    done_searching = true;
+                    continue;
+                }
+            }
         }
 
         //   left right (right-left)/5 center
