@@ -18,6 +18,7 @@
 #define BTREE_MAX_CHILDREN_FOR_NODE (2 * BTREE_T)
 #define BTREE_KEY_TYPE int
 
+// btree node
 typedef struct __type_btree_node {
     // id of the node matching its number in global BTREE nodes storage
     int id;
@@ -41,17 +42,29 @@ typedef struct __type_btree_node {
     struct __type_btree_node *children[BTREE_MAX_CHILDREN_FOR_NODE];
 } btree_node;
 
+// btree
 typedef struct __type_btree {
     char name[STRUCT_NAME_LENGTH];
     btree_node *root;
     int height;
 } btree;
 
+// the result of searching a btree for specific key
+//    * search result flag (true/false)
+//    * pointer to the node containing the key
+//    * index of the key in the node->keys array
+//    * found key (convenience feature)
+//
 typedef struct __type_btree_search_result {
+    boolean found;
     btree_node *node;
     int matching_key_index;
+    BTREE_KEY_TYPE key;
 } btree_search_result;
 
+// the result of searching a node for a key;
+// for details read comments for btree_node_find_key()
+// which returns this structure
 typedef struct __type_btree_node_key_search_result {
     boolean found;
     int position;
@@ -127,6 +140,7 @@ void free_node(btree_node *n) {
     return;
 }
 
+// dumps whole nodes storage (not just assigned to any specific btree)
 void dump_node_storage() {
     int max_length_of_btree_id;
     char *tmp_str;
@@ -143,6 +157,8 @@ void dump_node_storage() {
     printf("\n");
 }
 
+// dumps btree node, optionally dumps node id (which specifies
+// node place in the global nodes storage)
 void btree_node_dump(btree_node *x, boolean print_node_id) {
     printf(" ");
     
@@ -160,6 +176,8 @@ void btree_node_dump(btree_node *x, boolean print_node_id) {
     }
 }
 
+// dumps nodes which are at the required_level depth in the tree,
+// returns total number of nodes at this level (height, depth)
 int btree_print_nodes_by_level (btree_node *x, int required_level, int current_level, boolean print_node_id) {
     int i;
 
@@ -393,7 +411,7 @@ void btree_insert(btree *tree, BTREE_KEY_TYPE key) {
     }
 }
 
-// find either a key in the node keys array and/or its neighbours.
+// find a key in the node keys array and/or this key neighbours.
 //
 // currently implemented as a linear search returning result as static variable,
 // TODO: should be reimplemented as a binary search with dynamic memory result
@@ -404,13 +422,14 @@ void btree_insert(btree *tree, BTREE_KEY_TYPE key) {
 //    left_boundary -- zero-based left neighbour of the key
 //    right_boundary -- zero-based right neighbour of the key
 //
-//  when key is found
+//  when key is found in the node:
 //    * position holds index in the node->keys array
 //    * left_boundary holds either preceding index or -1 (if the key
 //      is at the leftmost position),
 //    * rifht_boundary holds either succeeding index or -1 (if the key
 //      is at the rightmost position)
-//  when key is not found
+//
+//  when key is not found in the node:
 //    * position holds -1
 //    * left_boundary holds either -1 (when searched key is to the left
 //      of the first key in the node) or zero-based position of the left neighbour
@@ -472,25 +491,25 @@ btree_node_key_search_result btree_node_find_key(btree_node *node, BTREE_KEY_TYP
 // search for the next key == the smallest key being greater than given key
 // (which might not exist in the (sub)tree)
 //
-// returns the structure which contains:
-//    * node -- pointer to the node where next key was found (or NULL)
-//    * matching_key_index -- zero-based position of the next key in the node
+// returns btree_search_result structure (described in header)
 // 
 btree_search_result btree_find_next(btree_node *node, BTREE_KEY_TYPE key) {
     btree_search_result tree_r;
     btree_node_key_search_result key_r;
 
+    tree_r.found = false;
+    tree_r.node = NULL;
+    
     key_r = btree_node_find_key(node, key);
 
     if (node->leaf == true) {
         // we don't care whether we've found the key, because we only need
         // its right_boundary (if it exists in the leaf node)
         if (key_r.right_boundary != -1) {
+            tree_r.found = true;
             tree_r.node = node;
             tree_r.matching_key_index = key_r.right_boundary;
-        }
-        else {
-            tree_r.node = NULL;
+            tree_r.key = tree_r.node->keys[tree_r.matching_key_index];
         }
     }
     else {
@@ -517,9 +536,11 @@ btree_search_result btree_find_next(btree_node *node, BTREE_KEY_TYPE key) {
 
             // if next key was not found on the level below, then we can assume
             // it's the right_boundary (if it exist)
-            if (tree_r.node == NULL && key_r.right_boundary != -1) {
+            if (tree_r.found == false && key_r.right_boundary != -1) {
+                tree_r.found = true;
                 tree_r.node = node;
                 tree_r.matching_key_index = key_r.right_boundary;
+                tree_r.key = tree_r.node->keys[tree_r.matching_key_index];
             }
         }
     }
@@ -530,13 +551,14 @@ btree_search_result btree_find_next(btree_node *node, BTREE_KEY_TYPE key) {
 // search for the previous key == the largest key being less than given key
 // (which might not exist in the (sub)tree)
 //
-// returns the structure which contains:
-//    * node -- pointer to the node where previous key was found (or NULL)
-//    * matching_key_index -- zero-based position of the previous key in the node
+// returns btree_search_result structure (described in header)
 //
 btree_search_result btree_find_previous(btree_node *node, BTREE_KEY_TYPE key) {
     btree_search_result tree_r;
     btree_node_key_search_result key_r;
+
+    tree_r.found = false;
+    tree_r.node = NULL;
 
     key_r = btree_node_find_key(node, key);
 
@@ -546,11 +568,10 @@ btree_search_result btree_find_previous(btree_node *node, BTREE_KEY_TYPE key) {
         // we don't care whether we've found the key, because we only need
         // its left_boundary (if it exists in the leaf node)
         if (key_r.left_boundary != -1) {
+            tree_r.found = true;
             tree_r.node = node;
             tree_r.matching_key_index = key_r.left_boundary;
-        }
-        else {
-            tree_r.node = NULL;
+            tree_r.key = tree_r.node->keys[tree_r.matching_key_index];
         }
     }
     else {
@@ -579,9 +600,11 @@ btree_search_result btree_find_previous(btree_node *node, BTREE_KEY_TYPE key) {
 
             // if previous key was not found on the level below, then we can assume
             // it's the left_boundary (if it exist)
-            if (tree_r.node == NULL && key_r.left_boundary != -1) {
+            if (tree_r.found == false && key_r.left_boundary != -1) {
+                tree_r.found = true;
                 tree_r.node = node;
                 tree_r.matching_key_index = key_r.left_boundary;
+                tree_r.key = tree_r.node->keys[tree_r.matching_key_index];
             }
         }
     }
@@ -646,9 +669,54 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
             // 2. If the key k is in node x and x is an internal node
         
             if (node->children[key_r.position]->n >= BTREE_T) {
-                // 2a. If the child y that precedes k in node x has at least t keys
+                // 2a. If the child y that precedes k  in node x has at least t keys
                 // then find the predecessor k0 of k in the subtree rooted at y.
-                
+                btree_search_result prev_r;
+                boolean removed_k0;
+
+                prev_r = btree_find_previous(node->children[key_r.position], key);
+                if (prev_r.found == true) {
+                    // Recursively delete k0
+                    removed_k0 = btree_remove_node(tree, node->children[key_r.position], prev_r.key);
+                    if (removed_k0 == false) {
+                        die("btree_remove_node: unable to remove just found key; error in btree implementation");
+                    }
+
+                    // and replace k by k0 in x.
+                    node->keys[key_r.position] = prev_r.key;
+                }
+                else {
+                    die("btree_remove_node: unable to find previous key for the given key in the left child with some keys; error in btree implementation");
+                }
+            }
+            else if (node->children[key_r.position + 1]->n >= BTREE_T) {
+                // 2b. If y has fewer than t keys, then, symmetrically, examine the child z that
+                // follows k in node x. If z has at least t keys then find the successor k0 of k in
+                // the subtree rooted at z.
+                btree_search_result next_r;
+                boolean removed_k0;
+
+                next_r = btree_find_next(node->children[key_r.position], key);
+                if (next_r.found == true) {
+                    // Recursively delete k0
+                    removed_k0 = btree_remove_node(tree, node->children[key_r.position], next_r.key);
+                    if (removed_k0 == false) {
+                        die("btree_remove_node: unable to remove just found key; error in btree implementation");
+                    }
+
+                    // and replace k by k0 in x.
+                    node->keys[key_r.position] = next_r.key;
+                }
+                else {
+                    die("btree_remove_node: unable to find next key for the given key in the right child with some keys; error in btree implementation");
+                }
+            }
+            else {
+                // Otherwise, if both y (left) and z (right) children have only t-1 keys,
+                // merge k and all of z (right child) into y (left child), so that x (current node)
+                // loses key and pointer to z (right child) and y (left child) contains 2t-1 keys,
+                // then free z (right child) and recursively delete key from the left child.
+
             }
         }
         else {
@@ -669,7 +737,7 @@ boolean btree_remove(btree *tree, BTREE_KEY_TYPE key) {
 
 // find a key in the btree starting with the given node using binary search
 //
-btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btree_search_result *result) {
+btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btree_search_result *presult) {
     int left_boundary = 0;
     int right_boundary = BTREE_MAX_KEYS_IN_NODE - 1;
     int center;
@@ -689,7 +757,7 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
                     // left boundary moved to center + 1 on the previous cycle,
                     // but it's not set (while previous center was), since it's
                     // not the leaf - descend into previous center "right" child
-                    return btree_search_node(node->children[left_boundary], key, result);
+                    return btree_search_node(node->children[left_boundary], key, presult);
                 }
                 else {
                     done_searching = true;
@@ -742,10 +810,10 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
             }
             else {
                 if (key < node->keys[center]) {
-                    return btree_search_node(node->children[center], key, result);
+                    return btree_search_node(node->children[center], key, presult);
                 }
                 if (node->keys[center] < key) {
-                    return btree_search_node(node->children[center + 1], key, result);
+                    return btree_search_node(node->children[center + 1], key, presult);
                 }
 
                 die("btree_search_node: something is very wrong; left %d, right %d, center %d, node id %d");
@@ -769,9 +837,11 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
     }
 
     if (found_key == true) {
-        result->node = node;
-        result->matching_key_index = found_key_position;
-        return result;
+        presult->found = true;
+        presult->node = node;
+        presult->matching_key_index = found_key_position;
+        presult->key = node->keys[found_key_position];
+        return presult;
     }
     else {
         return NULL;
@@ -782,8 +852,8 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
 // or struct which holds the node pointer and index of the key
 // in the result->node->keys array
 //
-btree_search_result *btree_search(btree *t, BTREE_KEY_TYPE key, btree_search_result *result) {
-    return btree_search_node(t->root, key, result);
+btree_search_result *btree_search(btree *t, BTREE_KEY_TYPE key, btree_search_result *presult) {
+    return btree_search_node(t->root, key, presult);
 }
 
 boolean btree_equal(btree *t1, btree *t2) {
@@ -829,7 +899,7 @@ int main(int argc, char *argv[]) {
     char cmd_short[MAX_MSG_SIZE] = "";
     BTREE_KEY_TYPE key;
 
-    while (readcmd("[a]dd N, [r]emove N, [p]rint, [d]ump node storage, [sp]revious N, [q]uit: ", cmd)) {
+    while (readcmd("[a]dd N, [r]emove N, [p]rint, [d]ump node storage, [sp]revious N, [sn]ext N, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             printf("bye\n");
@@ -874,29 +944,29 @@ int main(int argc, char *argv[]) {
             }
             if (strcmp(cmd_short, "sp") == 0) {
                 result = btree_find_previous(t.root, key);
-                if (result.node != NULL) {
+                if (result.found == true) {
                     printf("found previous key [%d] for the key [%d] in node [%d]!\n",
-                        result.node->keys[result.matching_key_index], key, result.node->id);
+                        result.key, key, result.node->id);
                 }
                 else {
                     printf("no previous key found for key [%d] in the tree!\n", key);
                 }
 
-                btree_dump(&t, true);
-                continue;
+//                btree_dump(&t, true);
+//                continue;
             }
             if (strcmp(cmd_short, "sn") == 0) {
                 result = btree_find_next(t.root, key);
-                if (result.node != NULL) {
+                if (result.found == true) {
                     printf("found next key [%d] for the key [%d] in node [%d]!\n",
-                        result.node->keys[result.matching_key_index], key, result.node->id);
+                        result.key, key, result.node->id);
                 }
                 else {
                     printf("no next key found for key [%d] in the tree!\n", key);
                 }
 
-                btree_dump(&t, true);
-                continue;
+//                btree_dump(&t, true);
+//                continue;
             }
         }
 
