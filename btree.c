@@ -29,9 +29,6 @@ typedef struct __type_btree_node {
     // keys stored in the node
     BTREE_KEY_TYPE keys[BTREE_MAX_KEYS_IN_NODE];
 
-    // whether given key is initialized or not
-    boolean keys_used[BTREE_MAX_KEYS_IN_NODE];
-
     // is this a leaf node
     boolean leaf;
     
@@ -112,7 +109,6 @@ btree_node *allocate_node() {
     int j = 0;
     while(j < BTREE_MAX_KEYS_IN_NODE) {
         BTREE_NODES[i].keys[j] = 0;
-        BTREE_NODES[i].keys_used[j] = false;
         BTREE_NODES[i].children[j] = NULL;
         j++;
     }
@@ -160,7 +156,7 @@ void dump_node_storage() {
 // dumps btree node, optionally dumps node id (which specifies
 // node place in the global nodes storage)
 void btree_node_dump(btree_node *x, boolean print_node_id) {
-    printf(" ");
+    printf("  ");
     
     if (print_node_id == true) {
         printf("node%d:", x->id);
@@ -169,7 +165,6 @@ void btree_node_dump(btree_node *x, boolean print_node_id) {
     int i;
     for(i=0; i < x->n; i++) {
         printf("%d", x->keys[i]);
-//        printf("%d (%s)", x->keys[i], (x->keys_used[i] == true ? "y" : "n"));
         if (i < x->n - 1) {
             printf("_");
         }
@@ -254,13 +249,11 @@ void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key) {
         // to prepare space for the key which is being inserted
         while (i >= 1 && key < node->keys[(i) - 1]) {
             node->keys[(i + 1) - 1] = node->keys[(i) - 1];
-            node->keys_used[(i + 1) - 1] = true;
             i--;
         }
 
         // insert the key into prepared position
         node->keys[(i + 1) - 1] = key;
-        node->keys_used[(i + 1) - 1] = true;
 
         // increment number of keys in the node
         node->n = node->n + 1;
@@ -323,8 +316,6 @@ void btree_split_child(btree_node *parent_node, int child_to_split_number) {
         i = j + BTREE_T;
 
         z->keys[j] = y->keys[i];
-        z->keys_used[j] = true;
-        y->keys_used[i] = false;
 
         if (y->leaf == false) {
             z->children[j] = y->children[i];
@@ -345,12 +336,10 @@ void btree_split_child(btree_node *parent_node, int child_to_split_number) {
     // in the parent by shifting its keys and children one to the right
     for (j = (parent_node->n) - 1; j >= child_to_split_number; j--) {
         parent_node->keys[j + 1] = parent_node->keys[j];
-        parent_node->keys_used[j + 1] = true;
         parent_node->children[(j + 1) + 1] = parent_node->children[(j) + 1];
     }
     // insert new key into parent_node->keys in place of moved key
     parent_node->keys[child_to_split_number] = y->keys[(BTREE_T) - 1];
-    parent_node->keys_used[child_to_split_number] = true;
     
     // insert pointer to z into the parent_node->children
     parent_node->children[child_to_split_number + 1] = z;
@@ -612,6 +601,31 @@ btree_search_result btree_find_previous(btree_node *node, BTREE_KEY_TYPE key) {
     return tree_r;
 }
 
+// appends key and source_node keys (and children if any) to the target_node
+// 
+void btree_append_adjacent_node (btree_node *target_node, btree_node *source_node, BTREE_KEY_TYPE key) {
+    if (target_node->leaf != source_node->leaf) {
+        die("Programmer error: btree_append_adjacent_node expects nodes of the same level");
+    }
+
+    target_node->keys[target_node->n] = key;
+    target_node->n = target_node->n + 1;
+
+    if (target_node->leaf == false) {
+        target_node->children[target_node->n] = source_node->children[0];
+    }
+
+    int i;
+    for(i=0; i < source_node->n; i++) {
+        target_node->keys[target_node->n] = source_node->keys[i];
+        target_node->n = target_node->n + 1;
+        
+        if (target_node->leaf == false) {
+            target_node->children[target_node->n] = source_node->children[i+1];
+        }
+    }
+}
+
 // deletes the key from subtree rooted at node.
 //
 // the procedure assumes that it is never called on a node
@@ -621,26 +635,6 @@ btree_search_result btree_find_previous(btree_node *node, BTREE_KEY_TYPE key) {
 // returns TRUE when the key was deleted or FALSE otherwise.
 //
 boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
-    // no keys in the node
-    if (node->n == 0) {
-        if (node->leaf == false) {
-            // if the root node x ever becomes an internal node having no keys
-            // (this situation can occur in cases 2c and 3b on pages 501-502),
-            // then we delete x, and x's only child x:c1 becomes the new root of the tree,
-            // decreasing the height of the tree by one and preserving the property
-            // that the root of the tree contains at least one key (unless the tree is empty).
-            if (node->children[0] == NULL) {
-                die("btree_remove_node: internal node [%d] has no keys and no children; btree_implementation error\n");
-//                die("btree_remove_node: internal node [%d] has no keys and no children; btree_implementation error\n", node->id);
-            }
-
-            tree->root = node->children[0];
-            free_node(node);
-        }
-        
-        return false;
-    }
-
     int i;
     btree_node_key_search_result key_r;
 
@@ -654,7 +648,6 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
             for (i=key_r.position; i < node->n - 1; i++) {
                 node->keys[i] = node->keys[i+1];
             }
-            node->keys_used[node->n - 1] = false;
             node->n = node->n - 1;
             return true;
         }
@@ -663,6 +656,10 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
         }
     }
     else {
+        btree_node *left_child, *right_child;
+        btree_search_result search_r;
+        boolean removed_k0;
+
         key_r = btree_node_find_key(node, key);
 
         if (key_r.found == true) {
@@ -671,19 +668,16 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
             if (node->children[key_r.position]->n >= BTREE_T) {
                 // 2a. If the child y that precedes k  in node x has at least t keys
                 // then find the predecessor k0 of k in the subtree rooted at y.
-                btree_search_result prev_r;
-                boolean removed_k0;
-
-                prev_r = btree_find_previous(node->children[key_r.position], key);
-                if (prev_r.found == true) {
+                search_r = btree_find_previous(node->children[key_r.position], key);
+                if (search_r.found == true) {
                     // Recursively delete k0
-                    removed_k0 = btree_remove_node(tree, node->children[key_r.position], prev_r.key);
+                    removed_k0 = btree_remove_node(tree, node->children[key_r.position], search_r.key);
                     if (removed_k0 == false) {
                         die("btree_remove_node: unable to remove just found key; error in btree implementation");
                     }
 
                     // and replace k by k0 in x.
-                    node->keys[key_r.position] = prev_r.key;
+                    node->keys[key_r.position] = search_r.key;
                 }
                 else {
                     die("btree_remove_node: unable to find previous key for the given key in the left child with some keys; error in btree implementation");
@@ -693,19 +687,16 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
                 // 2b. If y has fewer than t keys, then, symmetrically, examine the child z that
                 // follows k in node x. If z has at least t keys then find the successor k0 of k in
                 // the subtree rooted at z.
-                btree_search_result next_r;
-                boolean removed_k0;
-
-                next_r = btree_find_next(node->children[key_r.position], key);
-                if (next_r.found == true) {
+                search_r = btree_find_next(node->children[key_r.position + 1], key);
+                if (search_r.found == true) {
                     // Recursively delete k0
-                    removed_k0 = btree_remove_node(tree, node->children[key_r.position], next_r.key);
+                    removed_k0 = btree_remove_node(tree, node->children[key_r.position + 1], search_r.key);
                     if (removed_k0 == false) {
                         die("btree_remove_node: unable to remove just found key; error in btree implementation");
                     }
 
                     // and replace k by k0 in x.
-                    node->keys[key_r.position] = next_r.key;
+                    node->keys[key_r.position] = search_r.key;
                 }
                 else {
                     die("btree_remove_node: unable to find next key for the given key in the right child with some keys; error in btree implementation");
@@ -716,11 +707,147 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
                 // merge k and all of z (right child) into y (left child), so that x (current node)
                 // loses key and pointer to z (right child) and y (left child) contains 2t-1 keys,
                 // then free z (right child) and recursively delete key from the left child.
+                left_child = node->children[key_r.position];
+                right_child = node->children[key_r.position+1];
 
+                // merge k and both children into one node
+                btree_append_adjacent_node(left_child, right_child, key);
+
+                free_node(right_child);
+
+                // remove key and right_child from the node
+                for(i=key_r.position; i < node->n - 1; i++) {
+                    node->keys[i] = node->keys[i+1];
+                    node->children[i+1] = node->children[i+2];
+                }
+                node->n = node->n - 1;
+
+                if (node->root == true && node->n == 0) {
+                    tree->height = tree->height - 1;
+                    tree->root = left_child;
+                    left_child->root = true;
+                    free_node(node);
+                }
+
+                return btree_remove_node(tree, left_child, key);
             }
         }
         else {
-            // 3. If the key k is not present in internal node x
+            // 3. If the key k is not present in internal node x determine the root
+            // of the appropriate subtree that must contain k (x0)
+            btree_node *target_node;
+
+            if (key_r.left_boundary == -1) {
+                target_node = node->children[key_r.right_boundary];
+                left_child = NULL;
+                right_child = node->children[key_r.right_boundary + 1];
+            }
+            else if (key_r.right_boundary == -1) {
+                target_node = node->children[key_r.left_boundary + 1];
+                left_child = node->children[key_r.left_boundary];
+                right_child = NULL;
+            }
+            else {
+                target_node = node->children[key_r.right_boundary];
+                left_child = node->children[key_r.left_boundary];
+                right_child = node->children[key_r.right_boundary + 1];
+            }
+
+            // if x0 has only t-1 keys
+            if (target_node->n == BTREE_T - 1) {                
+                // (3a) but has an immediate sibling with at least t keys, give it
+                // an extra key by moving a key from x down into the x0,
+                // moving the first key from the sibling up to x to the empty place
+                // and moving child of the first key to the sibling's added key
+                
+                if (left_child != NULL && left_child->n >= BTREE_T) {
+                    // shift keys (and children) one to the right in the target node,
+                    // preparing the place for the key from current node
+                    for(i = target_node->n - 1; i>=0; i--) {
+                        target_node->keys[i+1] = target_node->keys[i];
+                        target_node->children[i+2] = target_node->children[i+1];
+                    }
+                    target_node->children[1] = target_node->children[0];
+
+                    // move key from node down to the target_node
+                    target_node->keys[0] = node->keys[key_r.left_boundary];
+
+                    // move key up from donor node in place of key which just moved down
+                    node->keys[key_r.left_boundary] = left_child->keys[left_child->n - 1];
+
+                    // move right child of the moved up key to the target_node
+                    target_node->children[0] = left_child->children[left_child->n];
+
+                    // update node counters for target node and donor node
+                    target_node->n = target_node->n + 1;
+                    left_child->n = left_child->n - 1;
+                }
+                else if (right_child != NULL && right_child->n >= BTREE_T) {
+                    // move the key down from this node to target_node
+                    target_node->keys[target_node->n] = node->keys[key_r.right_boundary];
+
+                    // move first key from donor node up to the empty place in this node
+                    node->keys[key_r.right_boundary] = right_child->keys[0];
+
+                    // move left child of the moved key from donor node to the target_node
+                    target_node->children[target_node->n + 1] = right_child->children[0];
+
+                    // contract keys and children of the donor node by one (shifting left)
+                    for(i = 0; i < right_child->n - 1; i++) {
+                        right_child->keys[i] = right_child->keys[i+1];
+                        right_child->children[i] = right_child->children[i+1];
+                    }
+                    right_child->children[right_child->n - 1] = right_child->children[right_child->n];
+
+                    // update node counters for target node and donor node
+                    target_node->n = target_node->n + 1;
+                    right_child->n = right_child->n - 1;
+                }
+                else {
+                    // (3b) If target_node and both of its immediate siblings have t-1 keys
+                    // (or one of its siblings does not exist), merge target_node
+                    // with one existing sibling which involves moving a key from current node
+                    // down into the merged node, where it becomes the median key for that node.
+
+                    if (left_child != NULL) {
+                        btree_append_adjacent_node(left_child, target_node, node->keys[key_r.left_boundary]);
+                       
+                        free_node(target_node);
+                        target_node = left_child;
+
+                        // shrink this node using the empty place where node->keys[key_r.left_boundary] was
+                        for (i=key_r.left_boundary; i < node->n - 1; i++) {
+                            node->keys[i] = node->keys[i+1];
+                            node->children[i+1] = node->children[i+2];
+                        }
+                        node->n = node->n - 1;
+                    }
+                    else if (right_child != NULL) {
+                        btree_append_adjacent_node(target_node, right_child, node->keys[key_r.right_boundary]);
+
+                        free_node(right_child);
+
+                        // shrink this node using the empty place where node->keys[key_r.right_boundary] was
+                        for (i=key_r.right_boundary; i < node->n - 1; i++) {
+                            node->keys[i] = node->keys[i+1];
+                            node->children[i+1] = node->children[i+2];
+                        }
+                        node->n = node->n - 1;
+                    }
+                    else {
+                        die("btree_remove_node: both left and right children for the key do not exist, btree implementation error");
+                    }
+
+                    if (node->root == true && node->n == 0) {
+                        tree->height = tree->height - 1;
+                        tree->root = target_node;
+                        target_node->root = true;
+                        free_node(node);
+                    }
+                }
+            }
+
+            return btree_remove_node(tree, target_node, key);
         }
 
         return false;
@@ -732,6 +859,15 @@ boolean btree_remove_node(btree *tree, btree_node *node, BTREE_KEY_TYPE key) {
 // this is a main function to delete a key from btree
 //
 boolean btree_remove(btree *tree, BTREE_KEY_TYPE key) {
+    btree_search_result *presult;
+    btree_search_result result;
+
+    presult = btree_search(tree, key, &result);
+    if (presult == NULL) {
+        printf("key [%d] doesn't exist in the tree, unable to remove\n", key);
+        return false;
+    }
+
     return btree_remove_node(tree, tree->root, key);
 }
 
@@ -747,7 +883,7 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
     boolean done_searching = false;
 
     while(done_searching != true) {
-        if (node->keys_used[left_boundary] == false) {
+        if (left_boundary >= node->n) {
             if (node->leaf == true) {
                 done_searching = true;
                 continue;
@@ -787,7 +923,7 @@ btree_search_result *btree_search_node(btree_node *node, BTREE_KEY_TYPE key, btr
 
 //        printf("%d <-- %d --> %d\n", left_boundary, center, right_boundary);
 
-        if (node->keys_used[center] == false) {
+        if (center >= node->n) {
             right_boundary = center - 1;
             continue;
         }
