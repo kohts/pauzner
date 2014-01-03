@@ -81,7 +81,7 @@ boolean BTREE_NODES_USED[BTREE_MAX_NODES];
 int BTREE_NODES_LAST_USED = 0;
 
 // forward declarations
-void btree_init(btree *t, char *name);
+void btree_create(btree *t, char *name);
 void btree_insert(btree *tree, BTREE_KEY_TYPE key);
 void btree_insert_nonfull(btree_node *node, BTREE_KEY_TYPE key);
 void btree_split_child(btree_node *parent_node, int child_to_split_number);
@@ -204,7 +204,7 @@ void btree_dump(btree *tree, boolean print_node_id) {
     printf("\n\n");
 }
 
-void btree_init(btree *t, char *name) {
+void btree_create(btree *t, char *name) {
     if (strlen(name) < 1) {
         die("btree_create: need btree name");
     }
@@ -1000,8 +1000,8 @@ boolean btree_test() {
     btree t1;
     btree t2;
 
-    btree_init(&t1, "actual");
-    btree_init(&t2, "expected");
+    btree_create(&t1, "actual");
+    btree_create(&t2, "expected");
 
     btree_insert(&t1, 1);
     btree_insert(&t1, 10);
@@ -1015,6 +1015,8 @@ boolean btree_test() {
 
 int main(int argc, char *argv[]) {
     if (argc == 2 && strcmp("test", argv[1]) == 0) {
+        die ("tests are not implemented yet");
+        
         if (btree_test() == TRUE) {
             printf("tests passed\n");
             return 0;
@@ -1028,14 +1030,14 @@ int main(int argc, char *argv[]) {
     btree_search_result *presult;
     btree_search_result result;
 
-    btree_init(&t, "tree 1");
+    btree_create(&t, "tree 1");
     btree_dump(&t, false);
 
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
     BTREE_KEY_TYPE key;
 
-    while (readcmd("[a]dd N, [r]emove N, [p]rint, [d]ump node storage, [sp]revious N, [sn]ext N, [q]uit: ", cmd)) {
+    while (readcmd("[a]dd N, [r]emove N, [d]ump node storage, [sp]revious N, [sn]ext N, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             printf("bye\n");

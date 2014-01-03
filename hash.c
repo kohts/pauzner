@@ -89,14 +89,14 @@ void hash_dump (struct HASH *h) {
     printf("\n\n");
 }
 
-void hash_init (struct HASH *h, char name[]) {
+void hash_create (struct HASH *h, char name[]) {
     if (strlen(name) < 1) {
-        die("hash_init: need hash name");
+        die("hash_create: need hash name");
     }
     else if (strlen(name) > STRUCT_NAME_LENGTH) {
         char *msg;
         msg = malloc(MAX_MSG_SIZE);
-        sprintf(msg, "hash_init: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
+        sprintf(msg, "hash_create: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
         die(msg);
         free(msg);
     }
@@ -247,8 +247,8 @@ bool hash_test() {
     struct HASH h1;
     struct HASH h2;
 
-    hash_init(&h1, "actual");
-    hash_init(&h2, "expected");
+    hash_create(&h1, "actual");
+    hash_create(&h2, "expected");
 
     hash_add(&h1, 9);
     hash_add(&h1, 19);
@@ -263,8 +263,8 @@ bool hash_test() {
         return FALSE;
     }
 
-    hash_init(&h1, "actual");
-    hash_init(&h2, "expected");
+    hash_create(&h1, "actual");
+    hash_create(&h2, "expected");
 
     hash_add(&h1, 3);
     hash_add(&h1, 4);
@@ -286,8 +286,8 @@ bool hash_test() {
     }
 
 
-    hash_init(&h1, "actual");
-    hash_init(&h2, "expected");
+    hash_create(&h1, "actual");
+    hash_create(&h2, "expected");
 
     hash_add(&h1, 3);
     hash_add(&h1, 4);
@@ -334,10 +334,10 @@ int main(int argc, char *argv[]) {
     char cmd_short[MAX_MSG_SIZE] = "";
     HASH_KEY_TYPE key;
 
-    hash_init(&h1, "test");
+    hash_create(&h1, "test");
     hash_dump(&h1);
 
-    while (readcmd("[a]dd N, [r]emove N, [p]rint, [q]uit: ", cmd)) {
+    while (readcmd("[a]dd N, [r]emove N, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
         if (strcmp(cmd, "q") == 0) {
             printf("bye\n");
