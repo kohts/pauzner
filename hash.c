@@ -94,11 +94,7 @@ void hash_create (struct HASH *h, char name[]) {
         die("hash_create: need hash name");
     }
     else if (strlen(name) > STRUCT_NAME_LENGTH) {
-        char *msg;
-        msg = malloc(MAX_MSG_SIZE);
-        sprintf(msg, "hash_create: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
-        die(msg);
-        free(msg);
+        die("hash_create: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
     }
 
     strcpy(h->name, name);
@@ -123,11 +119,7 @@ bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
 
         if (i == kh) {
             if (DEBUG == TRUE) {
-                char *msg;
-                msg = malloc(MAX_MSG_SIZE);
-                sprintf(msg, "[%s] hash_add: unable to add key [%d], no space left in hash", h->name, key);
-                die(msg);
-                free(msg);
+                die("[%s] hash_add: unable to add key [%d], no space left in hash", h->name, key);
             }
 
             return FALSE;
@@ -138,11 +130,7 @@ bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
     h->keys[i] = key;
     
     if (DEBUG == TRUE) {
-        char *msg;
-        msg = malloc(MAX_MSG_SIZE);
-        sprintf(msg, "[%s] hash_add: added key [%d] (key hash: %d, key position: %d)", h->name, key, kh, i);
-        debug(msg);
-        free(msg);
+        die("[%s] hash_add: added key [%d] (key hash: %d, key position: %d)", h->name, key, kh, i);
     }
 
     return TRUE;

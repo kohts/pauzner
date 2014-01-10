@@ -1,3 +1,7 @@
+#ifndef MYSTD_H
+#define MYSTD_H
+
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,12 +19,20 @@ boolean DEBUG = FALSE;
 // internal names of structs, kind of debugging
 #define STRUCT_NAME_LENGTH 100
 
-// TODO: make die accept variable list of parameters
-// suitable to be used in printf; man stdarg
-void die (char msg[]) {
-    fprintf(stderr, "fatal error: %s\n", msg);
+void die (char *msg, ...) {
+    va_list ap;
+    va_start(ap, msg);
+    vfprintf(stderr, msg, ap);
+
+    size_t msg_len = strlen(msg);
+    if (msg[msg_len - 1] != '\n') {
+        fprintf(stderr, "\n");
+    }
+
+    va_end(ap);
     exit(1);
 }
+
 void debug(char msg[]) {
     fprintf(stderr, "debug: %s\n", msg);
 }
@@ -55,3 +67,5 @@ bool readcmd(char *prompt, char cmd[]) {
 
     return TRUE;
 }
+
+#endif

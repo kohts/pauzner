@@ -209,11 +209,7 @@ void btree_create(btree *t, char *name) {
         die("btree_create: need btree name");
     }
     else if (strlen(name) > STRUCT_NAME_LENGTH) {
-        char *msg;
-        msg = malloc(MAX_MSG_SIZE);
-        sprintf(msg, "btree_create: btree name must be no longer than %d", STRUCT_NAME_LENGTH);
-        die(msg);
-        free(msg);
+        die("btree_create: btree name must be no longer than %d", STRUCT_NAME_LENGTH);
     }
 
     strcpy(t->name, name);
