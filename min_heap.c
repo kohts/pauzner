@@ -6,6 +6,7 @@
 //    change element priority
 //    remove element from the heap
 
+#include <mystd.h>
 #include <min_heap.h>
 
 // internal functions

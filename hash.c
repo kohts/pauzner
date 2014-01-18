@@ -11,6 +11,9 @@
 #define MAX_HASH_SIZE 10
 #define HASH_KEY_TYPE int
 
+// global debugging mode
+boolean DEBUG = FALSE;
+
 struct HASH {
     char name[STRUCT_NAME_LENGTH];
     bool used[MAX_HASH_SIZE];

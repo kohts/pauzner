@@ -1,4 +1,3 @@
-#include <mystd.h>
 #include <math.h>
 
 // max number of elements in heap
