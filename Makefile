@@ -13,15 +13,15 @@ btree: btree.c mystd.h mystd.o
 	../btree
 
 min_heap.o: min_heap.c min_heap.h
-	gcc -c $(CC_PARAM) min_heap.c
-min_heap: min_heap.c mystd.h mystd.o
-	gcc $(CC_PARAM) -o ../min_heap min_heap.c mystd.o -lm
-	../min_heap
+	gcc $(CC_PARAM) -c min_heap.c
+min_heap_interactive: min_heap_interactive.c min_heap.o mystd.h mystd.o
+	gcc $(CC_PARAM) -o ../min_heap_interactive min_heap_interactive.c min_heap.o mystd.o -lm
+	../min_heap_interactive
 
-merge_million_files: merge_million_files.c mystd.h mystd.o
-	gcc $(CC_PARAM) -o ../merge_million_files merge_million_files.c mystd.o
+merge_million_files: merge_million_files.c mystd.o min_heap.o
+	gcc $(CC_PARAM) -o ../merge_million_files merge_million_files.c mystd.o min_heap.o -lm
 
 
 .PHONY : clean
 clean:
-	rm *.o
+	rm -f *.o
