@@ -22,6 +22,7 @@ int main(int argc, char *argv[]) {
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
     HEAP_KEY_TYPE key;
+    void *associated_struct = NULL;
 
     while (readcmd("[a]dd N, [d]ump heap storage, [e]xtract min, [q]uit: ", cmd)) {
 //        printf("got [%s]\n", cmd);
@@ -33,7 +34,7 @@ int main(int argc, char *argv[]) {
             heap_dump_storage(&mheap);
         }
         if (strcmp(cmd, "e") == 0) {
-            if (heap_extract_min(&mheap, &key) == NULL) {
+            if (heap_extract_min(&mheap, &key, &associated_struct) == NULL) {
                 printf("empty heap, unable to extract min key\n");
             }
             else {
@@ -51,7 +52,7 @@ int main(int argc, char *argv[]) {
 //        printf("got: [%s] [%d]\n", cmd_short, key);
             printf("\n");
             if (strcmp(cmd_short, "a") == 0) {
-                heap_insert(&mheap, key);
+                heap_insert(&mheap, key, NULL);
             }
         }
 

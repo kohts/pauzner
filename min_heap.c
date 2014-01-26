@@ -50,7 +50,11 @@ void __heap_sift_down(heap *h, int j)
 //
 // returns NULL (and doesn't modify *k) if there are no keys in the heap
 //
-HEAP_KEY_TYPE *heap_extract_min(heap *h, HEAP_KEY_TYPE *k)
+// if there are keys, then
+//    copies minimum key from heap to the variable pointed to by k
+//    sets associated_struct pointer to the struct associated with the k
+//
+void *heap_extract_min(heap *h, HEAP_KEY_TYPE *k, void **associated_struct)
 {
     if (h->last_used == 0) {
         return NULL;
@@ -58,6 +62,7 @@ HEAP_KEY_TYPE *heap_extract_min(heap *h, HEAP_KEY_TYPE *k)
 
     // this should be something like copy_key(k, &h->heap[1])
     *k = h->heap[1];
+    *associated_struct = h->heap_struct[1];
 
     if (h->last_used == 1) {
         h->last_used = 0;
@@ -82,8 +87,13 @@ void __heap_swap_nodes (heap *h, int i, int j)
     }
 
     HEAP_KEY_TYPE tmp = h->heap[i];
+    void *tmp_struct = h->heap_struct[i];
+
     h->heap[i] = h->heap[j];
+    h->heap_struct[i] = h->heap_struct[j];
+
     h->heap[j] = tmp;
+    h->heap_struct[j] = tmp_struct;
 }
 
 // given binary heap and its key preserves (and fixes when needed)
@@ -108,7 +118,7 @@ void __heap_sift_up(heap *h, int i)
     }
 }
 
-void heap_insert(heap *h, HEAP_KEY_TYPE key)
+void heap_insert(heap *h, HEAP_KEY_TYPE key, void *associated_struct)
 {
     if (h->last_used >= HEAP_SIZE) {
         die("No empty space in heap, unable to insert element");
@@ -116,6 +126,7 @@ void heap_insert(heap *h, HEAP_KEY_TYPE key)
 
     h->last_used++;
     h->heap[h->last_used] = key;
+    h->heap_struct[h->last_used] = associated_struct;
     __heap_sift_up(h, h->last_used);
 }
 
@@ -133,6 +144,7 @@ void heap_create(heap *h, char *name)
     int i;
     for (i = 1; i <= HEAP_SIZE; i++) {
         h->heap[i] = 0;
+        h->heap_struct[i] = NULL;
     }
 
     h->last_used = 0;
@@ -190,11 +202,22 @@ void heap_dump_structured(heap *h)
 
 void heap_dump_storage(heap *h)
 {
-    printf("\nDumping heap storage [%s], last_used [%d]:\n", h->name, h->last_used);
-
     int i;
+
+    printf("\nDumping heap storage [%s], last_used [%d]:\n", h->name, h->last_used);
     for (i = 1; i <= h->last_used; i++) {
         printf("%d ", h->heap[i]);
+    }
+    printf("\n");
+
+    printf("\nDumping heap_struct storage [%s], last_used [%d]:\n", h->name, h->last_used);
+    for (i = 1; i <= h->last_used; i++) {
+        if (h->heap_struct[i] == NULL) {
+            printf("NULL ");
+        }
+        else {
+            printf("%p ", h->heap_struct[i]);
+        }
     }
     printf("\n");
 }
@@ -221,9 +244,9 @@ boolean heap_test()
 
     heap mheap;
     heap_create(&mheap, "min_heap 1");
-    heap_insert(&mheap, 1);
-    heap_insert(&mheap, -1);
-    heap_insert(&mheap, -2);
+    heap_insert(&mheap, 1, NULL);
+    heap_insert(&mheap, -1, NULL);
+    heap_insert(&mheap, -2, NULL);
     int j;
     for (j = 1; j <= 3; j++) {
         if (test2[j] != mheap.heap[j]) {
@@ -235,14 +258,14 @@ boolean heap_test()
         }
     }
 
-    heap test3 = { "test2", {0, 0, 1, 2, 3, }, 4};
+    heap test3 = { "test2", {0, 0, 1, 2, 3, }, {}, 4};
 
     heap mheap2;
     heap_create(&mheap2, "min_heap 2");
-    heap_insert(&mheap2, 3);
-    heap_insert(&mheap2, 2);
-    heap_insert(&mheap2, 1);
-    heap_insert(&mheap2, 0);
+    heap_insert(&mheap2, 3, NULL);
+    heap_insert(&mheap2, 2, NULL);
+    heap_insert(&mheap2, 1, NULL);
+    heap_insert(&mheap2, 0, NULL);
 
     if (heap_equal(&mheap2, &test3) != true) {
         printf("test 3 failed:\n");
@@ -253,9 +276,12 @@ boolean heap_test()
         printf("test 2 (reverse order) passed\n");
     }
 
-    heap test4 = { "test3", {0, 1, 3, 2, }, 3};
+    heap test4 = { "test3", {0, 1, 3, 2, }, {}, 3};
+
     HEAP_KEY_TYPE key;
-    if (heap_extract_min(&mheap2, &key) == NULL) {
+    void *key_struct = NULL;
+    
+    if (heap_extract_min(&mheap2, &key, &key_struct) == NULL) {
         printf("test 3 failed: expected to get min key, but heap is empty\n");
     }
     else if (heap_equal(&mheap2, &test4) != true) {

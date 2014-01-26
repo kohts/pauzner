@@ -1,20 +1,98 @@
+// O_NOATIME, O_DIRECT
+#define _GNU_SOURCE
+
 #include <mystd.h>
 #include <min_heap.h>
 
 // lstat
 #include <sys/types.h>
 #include <sys/stat.h>
+
+// read
 #include <unistd.h>
+
+// open
+#include <fcntl.h>
 
 // readdir
 #include <dirent.h>
 
+// isspace
+#include <ctype.h>
+
+// INT_MIN, INT_MAX
+#include <limits.h>
+
+// reads the open fd byte by byte till the next empty space or \n,
+// skips the space before the number
+//
+// returns true if the number was found and written to *number_storage,
+// false otherwise
+//
+// if fd reaches its end during read operation,
+// closes it and updates fd storage with -1
+//
+boolean read_number (int *fd, int *number_storage) {
+    char str_number[PATH_LENGTH];
+    int free_char = 0;
+
+    bool finish_reading = false;
+
+    READ_NUMBER: while (!finish_reading) {
+        char current_byte;
+
+        int read_bytes = read(*fd, &current_byte, 1);
+
+        if (read_bytes == -1) {
+            die_explaining_errno("read on fd [%d] returned [-1]", *fd);
+        }
+        if (read_bytes == 0) {
+            *fd = -1;
+            finish_reading = true;
+            goto READ_NUMBER;
+        }
+        if (isspace(current_byte)) {
+            if (free_char != 0) {
+                finish_reading = true;
+            }
+            
+            goto READ_NUMBER;
+        }
+
+        if (free_char > PATH_LENGTH) {
+            die("no empty space to write next byte of the number, fd [%d], read [%c]", *fd, current_byte);
+        }
+
+        str_number[free_char++] = current_byte;
+    }
+
+    if (free_char == 0) {
+        return false;
+    }
+
+    str_number[free_char] = '\0';
+
+    errno = 0;
+    long int tmp_int = strtol(str_number, (char **) NULL, 10);
+    if (errno != 0) {
+        die_explaining_errno("got not a number [%s] in fd [%d]", str_number, *fd);
+    }
+    if (tmp_int < INT_MIN || tmp_int > INT_MAX) {
+        die("got too big number for sorting heap [%d]", tmp_int);
+    }
+
+    *number_storage = tmp_int;
+
+    return true;
+}
+
 boolean merge_million_files (char *source_dir_name, char *dest_file_name)
 {
-    heap sorting_heap;
-    heap_create(&sorting_heap, "min_heap 1");
+    int merged_files_fd[1 + 100*100*100];
 
-    FILE *merged_files[100*100*100 + 1];
+    // segfaults if both arrays are defined (?)
+//    FILE *merged_files[1 + 100*100*100];
+
     int merged_files_last_used = 0;
 
     struct stat stat_buf;
@@ -67,6 +145,8 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
     DIR *source_level_1_stream;
     DIR *source_level_2_stream;
 
+    printf("reading files from [%s]\n", source_dir_name);
+
     READ_DIR: while (!read_whole_directory) {
         struct dirent *dir_contents;
 
@@ -85,8 +165,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
             }
         }
 
-        if (strcmp(".", dir_contents->d_name) == 0 ||
-            strcmp("..", dir_contents->d_name) == 0) {
+        if (strcmp(".", dir_contents->d_name) == 0 || strcmp("..", dir_contents->d_name) == 0) {
             goto READ_DIR;
         }
 
@@ -117,7 +196,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
         READ_DIR_1: while (!read_whole_directory_1) {
             struct dirent *dir_contents_1;
 
-            // If the end of the directory stream is reached, NULL is returned and errno is  not  changed.
+            // If the end of the directory stream is reached, NULL is returned and errno is not changed.
             // If an error occurs, NULL is returned and errno is set appropriately.
             int prev_errno_1 = errno;
             dir_contents_1 = readdir(source_level_1_stream);
@@ -132,8 +211,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
                 }
             }
 
-            if (strcmp(".", dir_contents_1->d_name) == 0 ||
-                strcmp("..", dir_contents_1->d_name) == 0) {
+            if (strcmp(".", dir_contents_1->d_name) == 0 || strcmp("..", dir_contents_1->d_name) == 0) {
                 goto READ_DIR_1;
             }
         
@@ -152,7 +230,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
                 }
             }
 
-            printf("%s (opened files [%d])\n", source_level_2, merged_files_last_used);
+            //printf("%s (opened files [%d])\n", source_level_2, merged_files_last_used);
 
             source_level_2_stream = opendir(source_level_2);
             if (source_level_2_stream == NULL) {
@@ -164,7 +242,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
             READ_DIR_2: while (!read_whole_directory_2) {
                 struct dirent *dir_contents_2;
 
-                // If the end of the directory stream is reached, NULL is returned and errno is  not  changed.
+                // If the end of the directory stream is reached, NULL is returned and errno is not changed.
                 // If an error occurs, NULL is returned and errno is set appropriately.
                 int prev_errno_2 = errno;
                 dir_contents_2 = readdir(source_level_2_stream);
@@ -179,8 +257,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
                     }
                 }
 
-                if (strcmp(".", dir_contents_2->d_name) == 0 ||
-                    strcmp("..", dir_contents_2->d_name) == 0) {
+                if (strcmp(".", dir_contents_2->d_name) == 0 || strcmp("..", dir_contents_2->d_name) == 0) {
                     goto READ_DIR_2;
                 }
 
@@ -199,12 +276,25 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
                     }
                 }
 
-                // printf("%s\n", source_level_3);
+//                printf("%s\n", source_level_3);
 
                 merged_files_last_used++;
-                merged_files[merged_files_last_used] = fopen(source_level_3, "r");
+
+                merged_files_fd[merged_files_last_used] = open(source_level_3, O_RDONLY);
+                if (merged_files_fd[merged_files_last_used] == -1) {
+                    die_explaining_errno("can't read file [%s], already opened [%d]", source_level_3, merged_files_last_used);
+                }
+
+/*                merged_files[merged_files_last_used] = fopen(source_level_3, "r");
                 if (merged_files[merged_files_last_used] == NULL) {
                     die_explaining_errno("can't read file [%s], already opened [%d]", source_level_3, merged_files_last_used);
+                }
+*/
+                // do not read more than we can process (sorry)
+                if (merged_files_last_used >= 200000) {
+                    read_whole_directory_2 = true;
+                    read_whole_directory_1 = true;
+                    read_whole_directory = true;
                 }
             }
 
@@ -221,12 +311,61 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
         }
         
 //    fprintf(dest_file, "%d\n", 10000 * i + 100 * j + k);
-    
     }
 
     res = closedir(source_dir_stream);
     if (res != 0) {
         die_explaining_errno("closedir [%s] returned [%d]", source_dir_name, res);
+    }
+
+    printf("opened [%d] files, populating heap\n", merged_files_last_used);
+
+    // do the heap
+    heap sorting_heap;
+    heap_create(&sorting_heap, "min_heap 1");
+
+    int i;
+    int tmp;
+
+    FOR_EACH_OPEN_FILE: for (i = 1; i <= merged_files_last_used; i++) {
+        // this file has been already read
+        if (merged_files_fd[i] == -1) {
+            goto FOR_EACH_OPEN_FILE;
+        }
+        
+        // nothing to read from this file
+        if (read_number(&merged_files_fd[i], &tmp) == false) {
+            goto FOR_EACH_OPEN_FILE;
+        }
+
+        // got new number, feed to the heap
+//        printf("read [%d] from %d fd [%d]\n", tmp, i, merged_files_fd[i]);
+        heap_insert(&sorting_heap, tmp, (void *) &merged_files_fd[i]);
+    }
+
+//    heap_dump_structured(&sorting_heap);
+//    heap_dump_storage(&sorting_heap);
+
+    printf("heap populated, merging\n");
+
+    while (heap_is_empty(&sorting_heap) == false) {
+        int min_key;
+        void *min_fd = NULL;
+        
+        if (heap_extract_min(&sorting_heap, &min_key, &min_fd) != NULL) {
+            // append to the sorted output file
+            fprintf(dest_file, "%d\n", min_key);
+
+            if (min_fd == NULL) {
+                die("heap data corruption: got NULL min_fd for key [%d]", min_key);
+            }
+            
+//            printf("key [%d], fd [%d]\n", min_key, *((int *) min_fd));
+
+            if (read_number((int *)min_fd, &tmp) == true) {
+                heap_insert(&sorting_heap, tmp, min_fd);
+            }
+        }
     }
 
     if (fclose(dest_file) != 0) {
@@ -291,8 +430,7 @@ boolean generate_million_files (char *dest_dir)
             }
         }
 
-        if (strcmp(".", dir_contents->d_name) == 0 ||
-            strcmp("..", dir_contents->d_name) == 0) {
+        if (strcmp(".", dir_contents->d_name) == 0 || strcmp("..", dir_contents->d_name) == 0) {
             goto READ_DIR;
         }
 

@@ -3,7 +3,7 @@
 void die_explaining_errno(char *msg, ...) {
     int orig_errno = errno;
 
-    char errno_explained[PATH_LENGTH];
+    char orig_errno_explained[PATH_LENGTH];
     char orig_msg[PATH_LENGTH];
 
     va_list ap;
@@ -11,11 +11,11 @@ void die_explaining_errno(char *msg, ...) {
 
     vsnprintf(orig_msg, (size_t) PATH_LENGTH, msg, ap);
 
-    if (strerror_r(errno, errno_explained, (size_t) PATH_LENGTH) == 0) {
-        fprintf(stderr, "%s, errno [%d]: %s\n", orig_msg, orig_errno, errno_explained);
+    if (strerror_r(errno, orig_errno_explained, (size_t) PATH_LENGTH) == 0) {
+        fprintf(stderr, "%s, errno [%d]: %s\n", orig_msg, orig_errno, orig_errno_explained);
     }
     else {
-        fprintf(stderr, "%s, errno [%d], additionally strerror_r failed with errno [%d]\n", orig_msg, orig_errno, errno);
+        fprintf(stderr, "%s, errno [%d], additionally strerror_r() failed with errno [%d]\n", orig_msg, orig_errno, errno);
     }
 
     va_end(ap);
