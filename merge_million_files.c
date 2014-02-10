@@ -32,7 +32,8 @@
 // if fd reaches its end during read operation,
 // closes it and updates fd storage with -1
 //
-boolean read_number (int *fd, int *number_storage) {
+boolean read_number (int *fd, int *number_storage)
+{
     char str_number[PATH_LENGTH];
     int free_char = 0;
 
@@ -101,12 +102,11 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
     res = lstat(dest_file_name, &stat_buf);
     if (res != 0) {
         if (errno == ENOENT) {
-        }
-        else {
+
+        } else {
             die_explaining_errno("lstat [%s] returned [%d]", dest_file_name, res);
         }
-    }
-    else {
+    } else {
         die("[%s] exists, not going to overwrite", dest_file_name);
     }
 
@@ -114,12 +114,10 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
     if (res != 0) {
         if (errno == ENOENT) {
             die("source directory [%s] doesn't exist, nothing to merge", source_dir_name);
-        }
-        else {
+        } else {
             die_explaining_errno("lstat [%s] returned [%d]", source_dir_name, res);
         }
-    }
-    else {
+    } else {
         if (! (S_ISDIR(stat_buf.st_mode)) ) {
             die("[%s] is not a directory, unable to continue", source_dir_name);
         }
@@ -330,12 +328,12 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
     FOR_EACH_OPEN_FILE: for (i = 1; i <= merged_files_last_used; i++) {
         // this file has been already read
         if (merged_files_fd[i] == -1) {
-            goto FOR_EACH_OPEN_FILE;
+            next FOR_EACH_OPEN_FILE;
         }
         
         // nothing to read from this file
         if (read_number(&merged_files_fd[i], &tmp) == false) {
-            goto FOR_EACH_OPEN_FILE;
+            next FOR_EACH_OPEN_FILE;
         }
 
         // got new number, feed to the heap

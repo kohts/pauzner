@@ -1,4 +1,7 @@
+// tests do not pass with such a huge HEAP_SIZE, this should be
+// allocated dynamically, without using stack
 #define HEAP_SIZE 200000
+
 #define HEAP_KEY_TYPE int
 
 typedef struct __type_heap heap;

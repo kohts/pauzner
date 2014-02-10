@@ -4,11 +4,11 @@ CC_PARAM=-Wall -I $(INCLUDE)
 mystd.o: mystd.c mystd.h
 	gcc $(CC_PARAM) -c mystd.c
 
-hash: hash.c mystd.h mystd.o
+hash: hash.c mystd.o
 	gcc $(CC_PARAM) -o ../hash hash.c mystd.o
 	../hash
 
-btree: btree.c mystd.h mystd.o
+btree: btree.c mystd.o
 	gcc $(CC_PARAM) -o ../btree btree.c mystd.o -lm
 	../btree
 

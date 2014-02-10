@@ -13,8 +13,7 @@ void die_explaining_errno(char *msg, ...) {
 
     if (strerror_r(errno, orig_errno_explained, (size_t) PATH_LENGTH) == 0) {
         fprintf(stderr, "%s, errno [%d]: %s\n", orig_msg, orig_errno, orig_errno_explained);
-    }
-    else {
+    } else {
         fprintf(stderr, "%s, errno [%d], additionally strerror_r() failed with errno [%d]\n", orig_msg, orig_errno, errno);
     }
 

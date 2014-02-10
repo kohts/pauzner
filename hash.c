@@ -8,34 +8,32 @@
 #include "mystd.h"
 
 #define MIN_FIXED_FIELD_WIDTH 3
-#define MAX_HASH_SIZE 10
 #define HASH_KEY_TYPE int
 
-// global debugging mode
-boolean DEBUG = FALSE;
-
-struct HASH {
+typedef struct __type_hash {
     char name[STRUCT_NAME_LENGTH];
-    bool used[MAX_HASH_SIZE];
-    HASH_KEY_TYPE keys[MAX_HASH_SIZE];
-};
+    bool *used;
+    HASH_KEY_TYPE *keys;
+    int size;
+} hash;
 
-int hash_function (HASH_KEY_TYPE key) {
-    return key % MAX_HASH_SIZE;
+int hash_function (HASH_KEY_TYPE key, int hash_size) {
+    return key % hash_size;
 }
 
-int next_by_clock (int position) {
+int next_by_clock (int position, int hash_size) {
     int new_position;
 
     new_position = position + 1;
-    if (new_position == MAX_HASH_SIZE) {
+    if (new_position == hash_size) {
         new_position = 0;
     }
 
     return new_position;
 }
 
-void hash_dump (struct HASH *h) {
+void hash_dump (hash *h)
+{
     int i;
 
     int longest_key = MIN_FIXED_FIELD_WIDTH;
@@ -43,7 +41,7 @@ void hash_dump (struct HASH *h) {
     char *tmp_str;
     tmp_str = malloc(MAX_MSG_SIZE);
 
-    sprintf(tmp_str, "%d", (int) MAX_HASH_SIZE - 1);
+    sprintf(tmp_str, "%d", (int) h->size - 1);
 
     current_key = strlen(tmp_str);
     if (longest_key < current_key) {
@@ -51,7 +49,7 @@ void hash_dump (struct HASH *h) {
     }
 
     // find longest key
-    for (i=0; i < MAX_HASH_SIZE; i++) {
+    for (i=0; i < h->size; i++) {
         if (h->used[i] == TRUE) {
             sprintf(tmp_str, "%d", (int) h->keys[i]);
             current_key = strlen(tmp_str);
@@ -65,12 +63,12 @@ void hash_dump (struct HASH *h) {
 
     printf("\nDumping hash table [%s]:\n", h->name);
     printf("    pos: ");
-    for (i=0; i < MAX_HASH_SIZE; i++)
+    for (i=0; i < h->size; i++)
         printf("%0*d ", longest_key, i);
     printf("\n");
 
     printf("    u[]: ");
-    for (i=0; i < MAX_HASH_SIZE; i++) {
+    for (i=0; i < h->size; i++) {
         if (h->used[i] == TRUE) {
             printf("%*d ", longest_key, TRUE);
         }
@@ -81,7 +79,7 @@ void hash_dump (struct HASH *h) {
     printf("\n");
 
     printf("    k[]: ");
-    for (i=0; i < MAX_HASH_SIZE; i++) {
+    for (i=0; i < h->size; i++) {
         if (h->used[i] == TRUE) {
             printf("%*d ", longest_key, h->keys[i]);
         }
@@ -92,39 +90,69 @@ void hash_dump (struct HASH *h) {
     printf("\n\n");
 }
 
-void hash_create (struct HASH *h, char name[]) {
+void hash_create (hash *h, char name[], int size)
+{
     if (strlen(name) < 1) {
         die("hash_create: need hash name");
-    }
-    else if (strlen(name) > STRUCT_NAME_LENGTH) {
+    } else if (strlen(name) > STRUCT_NAME_LENGTH) {
         die("hash_create: hash name must be no longer than %d", STRUCT_NAME_LENGTH);
     }
 
     strcpy(h->name, name);
+    h->size = size;
+
+    h->keys = NULL;
+    h->keys = malloc(sizeof(HASH_KEY_TYPE) * h->size);
+    if (h->keys == NULL) {
+        die("hash_create: unable to allocate %d bytes for keys array, hash %s", sizeof(HASH_KEY_TYPE) * h->size, h->name);
+    }
+
+    h->used = NULL;
+    h->used = malloc(sizeof(boolean) * h->size);
+    if (h->used == NULL) {
+        die("hash_create: unable to allocate %d bytes for used array, hash %s", sizeof(HASH_KEY_TYPE) * h->size, h->name);
+    }
 
     int i;
-    for(i=0; i < MAX_HASH_SIZE; i++) {
+    for(i=0; i < h->size; i++) {
         h->used[i] = FALSE;
         h->keys[i] = 0;
     }
 }
 
-bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
-    int kh = hash_function(key);
+void hash_free (hash *h) {
+    if (h->size == 0) {
+        die("Programmer error: hash_free called for uninitialized hash");
+    }
+
+    if (h->keys != NULL) {
+        free(h->keys);
+    }
+    if (h->used != NULL) {
+        free(h->used);
+    }
+    h->name[0] = 0;
+    h->size = 0;
+}
+
+bool hash_add (hash *h, HASH_KEY_TYPE key)
+{
+    int kh = hash_function(key, h->size);
     int i = kh;
 
+    // look for an empty place for the key starting with its own hash position
+    // which might have already been occupied
     while (h->used[i] == TRUE) {
+        
+        // already existing key
         if (h->keys[i] == key) {
             return TRUE;
         }
 
-        i = next_by_clock(i);
+        i = next_by_clock(i, h->size);
 
+        // checked all the hash, no empty space for the key
         if (i == kh) {
-            if (DEBUG == TRUE) {
-                die("[%s] hash_add: unable to add key [%d], no space left in hash", h->name, key);
-            }
-
             return FALSE;
         }
     }
@@ -132,20 +160,21 @@ bool hash_add (struct HASH *h, HASH_KEY_TYPE key) {
     h->used[i] = TRUE;
     h->keys[i] = key;
     
-    if (DEBUG == TRUE) {
-        die("[%s] hash_add: added key [%d] (key hash: %d, key position: %d)", h->name, key, kh, i);
-    }
-
     return TRUE;
 }
 
-bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
-    int kh = hash_function(key);
+bool hash_remove (hash *h, HASH_KEY_TYPE key)
+{
+    int kh = hash_function(key, h->size);
     int i = kh;
     bool found_key;
     int hole;
 
+    // search for the requested key starting with its hash place
+    // which might be occupied by some other key
     while (h->used[i] == TRUE) {
+
+        // found the key 
         if (h->keys[i] == key) {
             found_key = TRUE;
 
@@ -153,13 +182,15 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             h->used[hole] = FALSE;
             h->keys[hole] = 0;
 
-            i = next_by_clock(i);
+            // i points to the first key after the created hole
+            i = next_by_clock(i, h->size);
 
             break;
         }
 
-        i = next_by_clock(i);
+        i = next_by_clock(i, h->size);
 
+        // key is not present in hash at all, we've checked it all, can't remove
         if (i == kh) {
             return FALSE;
         }
@@ -169,13 +200,18 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
         return FALSE;
     }
 
+    // possible move some keys to occupy the hole which was freed above
     while (h->used[i] == TRUE) {
-        if (hash_function(h->keys[i]) == i) {
+        if (hash_function(h->keys[i], h->size) == i) {
+            // if the key is in its place, skip it
         }
         else if (
-            (i - hash_function(h->keys[i]) + MAX_HASH_SIZE) % MAX_HASH_SIZE >=
-            (i - hole + MAX_HASH_SIZE) % MAX_HASH_SIZE
+            (i - hash_function(h->keys[i], h->size) + h->size) % h->size >=
+            (i - hole + h->size) % h->size
             ) {
+            // if the gap between the key's place and the place it should be (value of hash_function)
+            // is greater than the gap between the key's place and the hole then "swap" the key with the hole
+            
             h->used[hole] = TRUE;
             h->keys[hole] = h->keys[i];
 
@@ -184,18 +220,21 @@ bool hash_remove (struct HASH *h, HASH_KEY_TYPE key) {
             h->keys[hole] = 0;
         }
 
-        i = next_by_clock(i);
+        i = next_by_clock(i, h->size);
 
+        // all the keys are at their best possible places now
+        // (we might have moved some of them before)
         if (i == kh) {
             return TRUE;
         }
     }
-
+    
     return TRUE;
 }
 
-bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
-    int kh = hash_function(key);
+bool hash_exists (hash *h, HASH_KEY_TYPE key)
+{
+    int kh = hash_function(key, h->size);
     int i = kh;
 
     while (h->used[i] == TRUE) {
@@ -203,7 +242,7 @@ bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
             return TRUE;
         }
 
-        i = next_by_clock(i);
+        i = next_by_clock(i, h->size);
 
         if (i == kh) {
             return FALSE;
@@ -213,20 +252,41 @@ bool hash_exists (struct HASH *h, HASH_KEY_TYPE key) {
     return FALSE;
 }
 
-bool hash_equal (struct HASH *h1, struct HASH *h2) {
+bool hash_equal (hash *h1, hash *h2)
+{
     int i = 0;
 
-    while (i < MAX_HASH_SIZE) {
-        if (h1->used[i] == h2->used[i]) {
-            if (h1->used[i] == TRUE) {
-                if (h1->keys[i] != h2->keys[i]) {
-                    return FALSE;
+    int max_hash_size;
+    if (h1->size > h2->size) {
+        max_hash_size = h1->size;
+    } else {
+        max_hash_size = h2->size;
+    }
+
+    while (i < max_hash_size) {
+        if (i < h1->size && i < h2->size) {
+            if (h1->used[i] == h2->used[i]) {
+                if (h1->used[i] == TRUE) {
+                    if (h1->keys[i] != h2->keys[i]) {
+                        return FALSE;
+                    }
                 }
+            } else {
+                return FALSE;
             }
+        } else if (h1->size >= i) {
+            if (h2->used[i] == TRUE) {
+                return FALSE;
+            }
+        } else if (h2->size >= i) {
+            if (h1->used[i] == TRUE) {
+                return FALSE;
+            }
+        } else {
+            die ("Programmer error: chosen max_hash_size %d for the hashes of size %d (%s) and %d (%s)",
+                max_hash_size, h1->size, h1->name, h2->size, h2->name);
         }
-        else {
-            return FALSE;
-        }
+        
         i++;
     }
 
@@ -235,11 +295,11 @@ bool hash_equal (struct HASH *h1, struct HASH *h2) {
 
 // unit tests for hash
 bool hash_test() {
-    struct HASH h1;
-    struct HASH h2;
+    hash h1;
+    hash h2;
 
-    hash_create(&h1, "actual");
-    hash_create(&h2, "expected");
+    hash_create(&h1, "actual", 10);
+    hash_create(&h2, "expected", 10);
 
     hash_add(&h1, 9);
     hash_add(&h1, 19);
@@ -248,14 +308,18 @@ bool hash_test() {
     hash_add(&h2, 19);
 
     if (hash_equal(&h1, &h2) != TRUE) {
-        printf("failed!\n");
-        hash_dump(&h2);
+        printf("test 1 failed!\n");
         hash_dump(&h1);
-        return FALSE;
+        hash_dump(&h2);
+    } else {
+        printf("test 1 ok.\n");
     }
+    hash_free(&h1);
+    hash_free(&h2);
 
-    hash_create(&h1, "actual");
-    hash_create(&h2, "expected");
+
+    hash_create(&h1, "actual", 10);
+    hash_create(&h2, "expected", 10);
 
     hash_add(&h1, 3);
     hash_add(&h1, 4);
@@ -270,15 +334,19 @@ bool hash_test() {
     hash_add(&h2, 14);
 
     if (hash_equal(&h1, &h2) != TRUE) {
-        printf("failed!\n");
-        hash_dump(&h2);
+        printf("test 2 failed!\n");
         hash_dump(&h1);
+        hash_dump(&h2);
         return FALSE;
+    } else {
+        printf("test 2 ok.\n");
     }
+    hash_free(&h1);
+    hash_free(&h2);
 
 
-    hash_create(&h1, "actual");
-    hash_create(&h2, "expected");
+    hash_create(&h1, "actual", 10);
+    hash_create(&h2, "expected", 10);
 
     hash_add(&h1, 3);
     hash_add(&h1, 4);
@@ -297,11 +365,27 @@ bool hash_test() {
     hash_add(&h2, 33);
 
     if (hash_equal(&h1, &h2) != TRUE) {
-        printf("failed!\n");
-        hash_dump(&h2);
+        printf("test 3 failed!\n");
         hash_dump(&h1);
+        hash_dump(&h2);
         return FALSE;
+    } else {
+        printf("test 3 ok.\n");
     }
+    hash_free(&h1);
+    hash_free(&h2);
+
+    hash_create(&h1, "actual", 1000);
+    int i = 0;
+    while (i < h1.size) {
+        hash_add(&h1, i++);
+    }
+    if (hash_add(&h1, i++) == TRUE) {
+        printf("test 4 failed!\n");
+    } else {
+        printf("test 4 ok.\n");
+    }
+    hash_free(&h1);
 
     return TRUE;
 }
@@ -309,7 +393,7 @@ bool hash_test() {
 int main(int argc, char *argv[]) {
     if (argc == 2 && strcmp("test", argv[1]) == 0) {
         if (hash_test() == TRUE) {
-            printf("tests passed\n");
+            printf("all tests passed successfully\n");
             return 0;
         }
         else {
@@ -317,15 +401,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    struct HASH h1;
-
-    if (argc > 1) DEBUG=TRUE;
+    hash h1;
 
     char cmd[MAX_MSG_SIZE] = "";
     char cmd_short[MAX_MSG_SIZE] = "";
     HASH_KEY_TYPE key;
 
-    hash_create(&h1, "test");
+    hash_create(&h1, "test dyn", 5);
+
     hash_dump(&h1);
 
     while (readcmd("[a]dd N, [r]emove N, [q]uit: ", cmd)) {
@@ -344,10 +427,14 @@ int main(int argc, char *argv[]) {
             printf("\n");
 
             if (strcmp(cmd_short, "a") == 0) {
-                hash_add(&h1, key);
+                if (!hash_add(&h1, key)) {
+                    printf("unable to add key [%d] to hash [%s]: no space left\n", key, h1.name);
+                }
             }
             if (strcmp(cmd_short, "r") == 0) {
-                hash_remove(&h1, key);
+                if (!hash_remove(&h1, key)) {
+                    printf("unable to remove key [%d] to hash [%s]: it's not there\n", key, h1.name);
+                }
             }
         }
 
