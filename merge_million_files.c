@@ -320,7 +320,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
 
     // do the heap
     heap sorting_heap;
-    heap_create(&sorting_heap, "min_heap 1");
+    heap_create(&sorting_heap, "min_heap 1", 100*100*100);
 
     int i;
     int tmp;
@@ -328,12 +328,12 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
     FOR_EACH_OPEN_FILE: for (i = 1; i <= merged_files_last_used; i++) {
         // this file has been already read
         if (merged_files_fd[i] == -1) {
-            next FOR_EACH_OPEN_FILE;
+            goto FOR_EACH_OPEN_FILE;
         }
         
         // nothing to read from this file
         if (read_number(&merged_files_fd[i], &tmp) == false) {
-            next FOR_EACH_OPEN_FILE;
+            goto FOR_EACH_OPEN_FILE;
         }
 
         // got new number, feed to the heap
@@ -365,6 +365,7 @@ boolean merge_million_files (char *source_dir_name, char *dest_file_name)
             }
         }
     }
+    heap_free(&sorting_heap);
 
     if (fclose(dest_file) != 0) {
         die_explaining_errno("can't close file [%s]", dest_file_name);

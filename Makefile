@@ -14,7 +14,7 @@ btree: btree.c mystd.o
 
 min_heap.o: min_heap.c min_heap.h
 	gcc $(CC_PARAM) -c min_heap.c
-min_heap_interactive: min_heap_interactive.c min_heap.o mystd.h mystd.o
+min_heap_interactive: min_heap_interactive.c min_heap.o mystd.o
 	gcc $(CC_PARAM) -o ../min_heap_interactive min_heap_interactive.c min_heap.o mystd.o -lm
 	../min_heap_interactive
 

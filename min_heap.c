@@ -79,11 +79,11 @@ void *heap_extract_min(heap *h, HEAP_KEY_TYPE *k, void **associated_struct)
 // i and j are valid nodes, exchange their values
 void __heap_swap_nodes (heap *h, int i, int j)
 {
-    if (i < 1 || i > HEAP_SIZE) {
-        die("Programmer error: __heap_swap_nodes got invalid key index (1st)");
+    if (i < 1 || i > h->size) {
+        die("Programmer error: __heap_swap_nodes got invalid key index [%d] (1st)", i);
     }
-    if (j < 1 || j > HEAP_SIZE) {
-        die("Programmer error: __heap_swap_nodes got invalid key index (2nd)");
+    if (j < 1 || j > h->size) {
+        die("Programmer error: __heap_swap_nodes got invalid key index [%d] (2nd)", j);
     }
 
     HEAP_KEY_TYPE tmp = h->heap[i];
@@ -120,7 +120,7 @@ void __heap_sift_up(heap *h, int i)
 
 void heap_insert(heap *h, HEAP_KEY_TYPE key, void *associated_struct)
 {
-    if (h->last_used >= HEAP_SIZE) {
+    if (h->last_used >= h->size) {
         die("No empty space in heap, unable to insert element");
     }
 
@@ -130,24 +130,53 @@ void heap_insert(heap *h, HEAP_KEY_TYPE key, void *associated_struct)
     __heap_sift_up(h, h->last_used);
 }
 
-void heap_create(heap *h, char *name)
+void heap_create(heap *h, char *name, int size)
 {
     if (strlen(name) < 1) {
         die("Programmer error: need heap name to create it");
-    }
-    else if (strlen(name) > STRUCT_NAME_LENGTH) {
+    } else if (strlen(name) > STRUCT_NAME_LENGTH) {
         die("Programmer error: heap name must be no longer than %d", STRUCT_NAME_LENGTH);
     }
 
     strcpy(h->name, name);
     
+    // will allocate space for (size + 1) elements, since we use 1-based array addressing
+    h->size = size;
+    
+    h->heap = NULL;
+    h->heap = (HEAP_KEY_TYPE *) malloc(sizeof(HEAP_KEY_TYPE) * (h->size + 1));
+    if (h->heap == NULL) {
+        die("heap_create: unable to allocate %d bytes for heap array, heap %s", sizeof(HEAP_KEY_TYPE) * (h->size + 1), h->name);
+    }
+
+    h->heap_struct = NULL;
+    h->heap_struct = (void **) malloc(sizeof(void *) * (h->size + 1));
+    if (h->heap_struct == NULL) {
+        die("heap_create: unable to allocate %d bytes for heap_struct array, heap %s", sizeof(void *) * (h->size + 1), h->name);
+    }
+
     int i;
-    for (i = 1; i <= HEAP_SIZE; i++) {
+    for (i = 0; i <= h->size; i++) {
         h->heap[i] = 0;
         h->heap_struct[i] = NULL;
     }
 
     h->last_used = 0;
+}
+
+void heap_free (heap *h) {
+    if (h->size == 0) {
+        die("Programmer error: heap_free called for uninitialized heap");
+    }
+
+    if (h->heap != NULL) {
+        free(h->heap);
+    }
+    if (h->heap_struct != NULL) {
+        free(h->heap_struct);
+    }
+    h->name[0] = 0;
+    h->size = 0;
 }
 
 bool heap_is_empty (heap *h)
@@ -157,7 +186,7 @@ bool heap_is_empty (heap *h)
 
 bool heap_can_insert (heap *h)
 {
-    return h->last_used < HEAP_SIZE;
+    return h->last_used < h->size;
 }
 
 // slow, time to traverse whole tree is O(N)
@@ -240,10 +269,10 @@ boolean heap_equal(heap *h1, heap *h2)
 
 boolean heap_test()
 {
-    int test2[HEAP_SIZE + 1] = { 0, -2, 1, -1, };
+    int test2[4 + 1] = { 0, -2, 1, -1, };
 
     heap mheap;
-    heap_create(&mheap, "min_heap 1");
+    heap_create(&mheap, "min_heap 1", 3);
     heap_insert(&mheap, 1, NULL);
     heap_insert(&mheap, -1, NULL);
     heap_insert(&mheap, -2, NULL);
@@ -252,16 +281,23 @@ boolean heap_test()
         if (test2[j] != mheap.heap[j]) {
             printf("test 1.%d failed, got %d instead of %d\n", j+1, mheap.heap[j], test2[j]);
             exit(1);
-        }
-        else {
+        } else {
             printf("test 1.%d passed\n", j + 1);
         }
     }
+    heap_free(&mheap);
 
-    heap test3 = { "test2", {0, 0, 1, 2, 3, }, {}, 4};
+    heap test3;
+    heap_create(&test3, "test3", 4);
+    test3.heap[0] = 0;
+    test3.heap[1] = 0;
+    test3.heap[2] = 1;
+    test3.heap[3] = 2;
+    test3.heap[4] = 3;
+    test3.last_used = 4;
 
     heap mheap2;
-    heap_create(&mheap2, "min_heap 2");
+    heap_create(&mheap2, "min_heap 2", 4);
     heap_insert(&mheap2, 3, NULL);
     heap_insert(&mheap2, 2, NULL);
     heap_insert(&mheap2, 1, NULL);
@@ -271,20 +307,25 @@ boolean heap_test()
         printf("test 3 failed:\n");
         heap_dump_storage(&mheap2);
         heap_dump_storage(&test3);
-    }
-    else {
+    } else {
         printf("test 2 (reverse order) passed\n");
     }
+    heap_free(&test3);
 
-    heap test4 = { "test3", {0, 1, 3, 2, }, {}, 3};
+    heap test4;
+    heap_create(&test4, "test4", 3);
+    test4.heap[0] = 0;
+    test4.heap[1] = 1;
+    test4.heap[2] = 3;
+    test4.heap[3] = 2;
+    test4.last_used = 3;
 
     HEAP_KEY_TYPE key;
     void *key_struct = NULL;
     
     if (heap_extract_min(&mheap2, &key, &key_struct) == NULL) {
         printf("test 3 failed: expected to get min key, but heap is empty\n");
-    }
-    else if (heap_equal(&mheap2, &test4) != true) {
+    } else if (heap_equal(&mheap2, &test4) != true) {
         printf("test 3 failed: heaps are not equal\n");
         heap_dump_storage(&mheap2);
         heap_dump_storage(&test4);
@@ -292,6 +333,9 @@ boolean heap_test()
     else {
         printf("test 3 (extract min key) passed\n");
     }
+    heap_free(&test4);
+
+    heap_free(&mheap2);
 
     return true;
 }

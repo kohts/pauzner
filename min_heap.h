@@ -1,7 +1,3 @@
-// tests do not pass with such a huge HEAP_SIZE, this should be
-// allocated dynamically, without using stack
-#define HEAP_SIZE 200000
-
 #define HEAP_KEY_TYPE int
 
 typedef struct __type_heap heap;
@@ -19,11 +15,12 @@ void *heap_extract_min    (heap *, HEAP_KEY_TYPE *, void **);
 void heap_insert          (heap *, HEAP_KEY_TYPE, void *);
 void heap_dump_structured (heap *);
 void heap_dump_storage    (heap *);
-void heap_create          (heap *, char *);
+void heap_create          (heap *, char *, int);
 bool heap_equal           (heap *, heap *);
 bool heap_is_empty        (heap *);
 bool heap_can_insert      (heap *);
 bool heap_test            ();
+void heap_free            ();
 
 // min-heap priority queue
 typedef struct __type_heap {
@@ -32,12 +29,15 @@ typedef struct __type_heap {
     // heap storage, zeroed in heap_create
     //
     // ATTN: 0 element is not used (!)
-    HEAP_KEY_TYPE heap[HEAP_SIZE + 1]; // 1..last_used
+    HEAP_KEY_TYPE *heap; // 1..last_used
 
     // storage for pointer to the struct associated with the heap element
-    void *heap_struct[HEAP_SIZE + 1];
+    void **heap_struct;
 
     // points to the first free leaf in the tree
     int last_used;
+
+    // size of the heap
+    int size;
 } heap;
 

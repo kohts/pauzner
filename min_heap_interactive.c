@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     }
 
     heap mheap;
-    heap_create(&mheap, "min_heap 1");
+    heap_create(&mheap, "min_heap 1", 100);
 
     heap_dump_structured(&mheap);
 
@@ -58,6 +58,8 @@ int main(int argc, char *argv[]) {
 
         heap_dump_structured(&mheap);
     }
+
+    heap_free(&mheap);
 
     return 0;
 }
