@@ -39,7 +39,7 @@ void hash_dump (hash *h)
     int longest_key = MIN_FIXED_FIELD_WIDTH;
     int current_key;
     char *tmp_str;
-    tmp_str = malloc(MAX_MSG_SIZE);
+    tmp_str = (char *) malloc(MAX_MSG_SIZE);
 
     sprintf(tmp_str, "%d", (int) h->size - 1);
 
@@ -102,13 +102,13 @@ void hash_create (hash *h, char name[], int size)
     h->size = size;
 
     h->keys = NULL;
-    h->keys = malloc(sizeof(HASH_KEY_TYPE) * h->size);
+    h->keys = (HASH_KEY_TYPE *) malloc(sizeof(HASH_KEY_TYPE) * h->size);
     if (h->keys == NULL) {
         die("hash_create: unable to allocate %d bytes for keys array, hash %s", sizeof(HASH_KEY_TYPE) * h->size, h->name);
     }
 
     h->used = NULL;
-    h->used = malloc(sizeof(boolean) * h->size);
+    h->used = (boolean *) malloc(sizeof(boolean) * h->size);
     if (h->used == NULL) {
         die("hash_create: unable to allocate %d bytes for used array, hash %s", sizeof(HASH_KEY_TYPE) * h->size, h->name);
     }
