@@ -123,26 +123,26 @@ sub calc_rpn
 
     my $calc = [];
 
-    while (my $el = shift(@{$rpn})) {
-        if ($operators->{$el}) {
+    while (my $token = shift(@{$rpn})) {
+        if ($operators->{$token}) {
             my $tmp_value_1 = pop (@{$calc});
             my $tmp_value_2 = pop (@{$calc});
 
-            if ($el eq "+") {
+            if ($token eq "+") {
                 push (@{$calc}, $tmp_value_2 + $tmp_value_1);
-            } elsif ($el eq "-") {
+            } elsif ($token eq "-") {
                 push (@{$calc}, $tmp_value_2 - $tmp_value_1);
-            } elsif ($el eq "*") {
+            } elsif ($token eq "*") {
                 push (@{$calc}, $tmp_value_2 * $tmp_value_1);
-            } elsif ($el eq "/") {
+            } elsif ($token eq "/") {
                 push (@{$calc}, $tmp_value_2 / $tmp_value_1);
-            } elsif ($el eq "^") {
+            } elsif ($token eq "^") {
                 push (@{$calc}, $tmp_value_2 ** $tmp_value_1);
             } else {
-                Carp::confess("Programmer error: operator [$el] is not implemented.");
+                Carp::confess("Programmer error: operator [$token] is not implemented.");
             }
         } else {
-            push (@{$calc}, $el);
+            push (@{$calc}, $token);
         }
     }
 

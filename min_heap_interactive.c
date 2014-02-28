@@ -36,8 +36,7 @@ int main(int argc, char *argv[]) {
         if (strcmp(cmd, "e") == 0) {
             if (heap_extract_min(&mheap, &key, &associated_struct) == NULL) {
                 printf("empty heap, unable to extract min key\n");
-            }
-            else {
+            } else {
                 printf("got min key: %d\n", key);
             }
         }
