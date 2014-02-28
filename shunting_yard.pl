@@ -24,37 +24,48 @@ sub shunting_yard
     my $out = [];
     my $op_stack = [];
 
-    # split string into array
+    # split string into array (tokenize)
     my $in_str = [split("", $expression)];
-    my $el = "";
+    my $token = "";
+
+    my $previous_token = "";
+
     CHAR: while (my $char = shift(@{$in_str})) {
         next CHAR if $char =~ /\s/;
-        if ($operators->{$char} || $char eq "(" || $char eq ")") {
-            if ($el) {
-                push (@{$in}, $el);
+        
+        if ($operators->{$previous_token} && ($char eq "+" || $char eq "-")) {
+            # previos was [+-*/^], current is + or -
+            $token = $token . $char;
+            $previous_token = "";
+        } elsif ($operators->{$char} || $char eq "(" || $char eq ")") {
+            if ($token) {
+                push (@{$in}, $token);
             }
+            $token = "";
 
             push (@{$in}, $char);
-            $el = "";
+
+            $previous_token = $char;
         } else {
-            $el = $el . $char;
+            $token = $token . $char;
+            $previous_token = "";
         }
     }
-    push (@{$in}, $el);
+    push (@{$in}, $token);
 
     my $infix = [@{$in}];
 
     # convert array from infix to rpn
-    SYMBOL: while (my $sym = shift(@{$in}) ) {
-        if ($operators->{$sym}) {
+    TOKEN: while (my $token = shift(@{$in}) ) {
+        if ($operators->{$token}) {
             CHECK_OP_STACK: while (scalar(@{$op_stack})) {
                 my $top_op = $op_stack->[scalar(@{$op_stack}) - 1];
     
                 if ($operators->{$top_op} &&
                     (
-                        $operators->{$sym}->{'precedence'} == $operators->{$top_op}->{'precedence'} &&
-                        $operators->{$sym}->{'associativity'} eq 'left' ||
-                        $operators->{$sym}->{'precedence'} < $operators->{$top_op}->{'precedence'}
+                        $operators->{$token}->{'precedence'} == $operators->{$top_op}->{'precedence'} &&
+                        $operators->{$token}->{'associativity'} eq 'left' ||
+                        $operators->{$token}->{'precedence'} < $operators->{$top_op}->{'precedence'}
                     )
                     ) {
                     
@@ -64,10 +75,10 @@ sub shunting_yard
                 }
             }
 
-            push (@{$op_stack}, $sym);
-        } elsif ($sym eq "(") {
-            push (@{$op_stack}, $sym);
-        } elsif ($sym eq ")") {
+            push (@{$op_stack}, $token);
+        } elsif ($token eq "(") {
+            push (@{$op_stack}, $token);
+        } elsif ($token eq ")") {
             my $found_matching_paren;
             CHECK_OP_STACK: while (scalar(@{$op_stack})) {
                 my $top_op = $op_stack->[scalar(@{$op_stack}) - 1];
@@ -83,7 +94,7 @@ sub shunting_yard
             Carp::confess("Invalid expression: can't find matching parenthesis")
                 if !$found_matching_paren;
         } else {
-            push @{$out}, $sym;
+            push @{$out}, $token;
         }
     }
 
@@ -92,9 +103,9 @@ sub shunting_yard
     }
 
     if ($opts->{'debug'}) {
-        print $expression . "\n";
-        print join(" ", @{$infix}) . "\n";
-        print join(" ", @{$out}) . "\n";
+        print "ORIGINAL: " . $expression . "\n";
+        print "TOKENIZED: " . join(" ", @{$infix}) . "\n";
+        print "RPN: " . join(" ", @{$out}) . "\n";
     }
 
     return {
@@ -151,61 +162,33 @@ if (!$ARGV[0]) {
 }
 
 if ($ARGV[0] eq 'test') {
-    $r = shunting_yard("2+3", {'debug' => 1});
-    if (join(" ", @{$r->{'rpn'}}) eq "2 3 +") {
-        print "test 1.1 passed\n";
-    } else {
-        Carp::confess("test 1.1 failed; expected rpn '2 3 +', got '" . Data::Dumper::Dumper($r));
-    }
-    $r1 = calc_rpn($r->{'rpn'}, {'debug' => 1});
-    if ($r1 eq '5') {
-        print "test 1.2 passed\n";
-    } else {
-        Carp::confess("test 1.2 failed; expected result '5', got '" . Data::Dumper::Dumper($r1));
-    }
-    printf("\n");
+    my $tests = [
+        { 'expression' => "2+3",             'expected_rpn' => "2 3 +",                     'expected_result' => 5, },
+        { 'expression' => "2+3*5-12",        'expected_rpn' => "2 3 5 * + 12 -",            'expected_result' => 5, },
+        { 'expression' => "3+4*2/(1-5)",     'expected_rpn' => "3 4 2 * 1 5 - / +",         'expected_result' => 1, },
+        { 'expression' => "3+4*2/(1-5)^2^3", 'expected_rpn' => "3 4 2 * 1 5 - 2 3 ^ ^ / +", 'expected_result' => (3+1/8192), },
+        { 'expression' => "1+-1",            'expected_rpn' => "1 -1 +",                    'expected_result' => 0, },
+        ];
 
-    $r = shunting_yard("2+3*5-12", {'debug' => 1});
-    if (join(" ", @{$r->{'rpn'}}) eq "2 3 5 * + 12 -") {
-        print "test 2.1 passed\n";
-    } else {
-        Carp::confess("test 2.1 failed; expected rpn '2 3 5 * + 12 -', got '" . Data::Dumper::Dumper($r));
-    }
-    $r1 = calc_rpn($r->{'rpn'}, {'debug' => 1});
-    if ($r1 eq '5') {
-        print "test 2.2 passed\n";
-    } else {
-        Carp::confess("test 2.2 failed; expected result '5', got '" . Data::Dumper::Dumper($r1));
-    }
-    printf("\n");
+    my $i = 0;
+    foreach my $test (@{$tests}) {
+        $i++;
 
-    $r = shunting_yard("3+4*2/(1-5)", {'debug' => 1});
-    if (join(" ", @{$r->{'rpn'}}) eq "3 4 2 * 1 5 - / +") {
-        print "test 3.1 passed\n";
-    } else {
-        Carp::confess("test 3.1 failed; expected rpn '3 4 2 * 1 5 - / +', got '" . Data::Dumper::Dumper($r));
+        $r = shunting_yard($test->{'expression'}, {'debug' => 1});
+        if (join(" ", @{$r->{'rpn'}}) eq $test->{'expected_rpn'}) {
+            print "test $i.1 passed\n";
+        } else {
+            Carp::confess("test $i.1 failed; expected rpn [" . $test->{'expected_rpn'} . "], got: " . Data::Dumper::Dumper($r));
+        }
+    
+        $r1 = calc_rpn($r->{'rpn'}, {'debug' => 1});
+        if ($r1 == $test->{'expected_result'}) {
+            print "test $i.2 passed\n";
+        } else {
+            Carp::confess("test $i.2 failed; expected result [" . $test->{'expected_result'} . "], got " . Data::Dumper::Dumper($r1));
+        }
+        printf("\n");
     }
-    $r1 = calc_rpn($r->{'rpn'}, {'debug' => 1});
-    if ($r1 eq '1') {
-        print "test 3.2 passed\n";
-    } else {
-        Carp::confess("test 3.2 failed; expected result '1', got '" . Data::Dumper::Dumper($r1));
-    }
-    printf("\n");
-
-    $r = shunting_yard("3+4*2/(1-5)^2^3", {'debug' => 1});
-    if (join(" ", @{$r->{'rpn'}}) eq "3 4 2 * 1 5 - 2 3 ^ ^ / +") {
-        print "test 4.1 passed\n";
-    } else {
-        Carp::confess("test 4.1 failed; expected rpn '3 4 2 * 1 5 - 2 3 ^ ^ / +', got '" . Data::Dumper::Dumper($r));
-    }
-    $r1 = calc_rpn($r->{'rpn'}, {'debug' => 1});
-    if ($r1 == (3+1/8192)) {
-        print "test 4.2 passed\n";
-    } else {
-        Carp::confess("test 4.2 failed; expected result '" . (3+1/8192) . "', got '" . Data::Dumper::Dumper($r1));
-    }
-    printf("\n");
 }
 else {
     $r = shunting_yard($ARGV[0], {'debug' => 1});

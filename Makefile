@@ -21,6 +21,10 @@ min_heap_interactive: min_heap_interactive.c min_heap.o mystd.o
 merge_million_files: merge_million_files.c mystd.o min_heap.o
 	gcc $(CC_PARAM) -o ../merge_million_files merge_million_files.c mystd.o min_heap.o -lm
 
+stack.o: stack.c stack.h
+	gcc $(CC_PARAM) -c stack.c
+stack_interactive: stack_interactive.c stack.o mystd.o
+	gcc $(CC_PARAM) -o ../stack_interactive stack_interactive.c stack.o mystd.o
 
 .PHONY : clean
 clean:

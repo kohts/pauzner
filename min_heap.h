@@ -40,4 +40,3 @@ typedef struct __type_heap {
     // size of the heap
     int size;
 } heap;
-
