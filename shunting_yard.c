@@ -123,8 +123,6 @@ void shunting_yard(char *expression, stack *out)
     }
     if (strlen(token) > 0) {
         stack_push(&in_tokenized, token);
-    } else {
-        die("Programmer error: shunting_yard got invalid expression, must end with operand; got: %s", expression);
     }
 
     stack in_tokenized_reversed;
@@ -270,7 +268,45 @@ float calc_rpn(stack *rpn)
 
 bool shunting_yard_test()
 {
-    return true;
+    struct struct_test {
+        char *expression;
+        float value;
+    } tests[] = {
+        { "2+3", 5 },
+        { "2+3*5-12", 5 },
+        { "3+4*2/(1-5)", 1 },
+        { "3+4*2/(1-5)^2^3", 3+1.0/8192 },
+        { "1+-1", 0 },
+        { "3+2*5-2/2", 12 },
+    };
+
+    bool failed = false;
+    stack rpn;
+    float f;
+
+    int n_tests = sizeof(tests) / sizeof(struct struct_test);
+
+    int i;
+    for (i=0; i<n_tests; i++) {
+        stack_create(&rpn, "RPN", 100);
+        shunting_yard(tests[i].expression, &rpn);
+        f = calc_rpn(&rpn);
+
+        if (f == tests[i].value) {
+            printf("test %d passed: %s == %f\n", i+1, tests[i].expression, tests[i].value);
+        } else {
+            printf("test %d failed: %s: got %f, expected %f\n", i+1, tests[i].expression, f, tests[i].value);
+            failed = true;
+        }
+        
+        stack_free(&rpn);
+    }
+
+    if (failed == true) {
+        return false;
+    } else {
+      return true;
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -280,16 +316,29 @@ int main(int argc, char *argv[]) {
         }
 
         return 0;
+    } else {
+        char *expression;
+        
+        int arg_size = 0;
+        int i;
+        for (i=1; i<argc; i++) {
+            arg_size = arg_size + strlen(argv[i]);
+        }
+        
+        expression = (char *) malloc(arg_size + 1);
+        for (i=1; i<argc; i++) {
+            strcat(expression, argv[i]);
+        }
+
+        stack rpn;
+        stack_create(&rpn, "RPN", 100);
+        shunting_yard(expression, &rpn);
+        float f = calc_rpn(&rpn);
+        stack_dump(&rpn);
+
+        printf("expression: %s\n", expression);
+        printf("value: %f\n", f);
     }
-
-    stack rpn;
-    stack_create(&rpn, "RPN", 100);
-
-    shunting_yard("3+2*5-2/2", &rpn);
-    float f = calc_rpn(&rpn);
-    stack_dump(&rpn);
-
-    printf("result: %f\n", f);    
 
     return 0;
 }

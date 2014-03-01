@@ -51,7 +51,9 @@ sub shunting_yard
             $previous_token = "";
         }
     }
-    push (@{$in}, $token);
+    if ($token) {
+        push (@{$in}, $token);
+    }
 
     my $infix = [@{$in}];
 
@@ -104,7 +106,7 @@ sub shunting_yard
 
     if ($opts->{'debug'}) {
         print "ORIGINAL: " . $expression . "\n";
-        print "TOKENIZED: " . join(" ", @{$infix}) . "\n";
+        print "TOKENIZED: " . join(" ", @{$infix}) . ")\n";
         print "RPN: " . join(" ", @{$out}) . "\n";
     }
 
@@ -168,6 +170,7 @@ if ($ARGV[0] eq 'test') {
         { 'expression' => "3+4*2/(1-5)",     'expected_rpn' => "3 4 2 * 1 5 - / +",         'expected_result' => 1, },
         { 'expression' => "3+4*2/(1-5)^2^3", 'expected_rpn' => "3 4 2 * 1 5 - 2 3 ^ ^ / +", 'expected_result' => (3+1/8192), },
         { 'expression' => "1+-1",            'expected_rpn' => "1 -1 +",                    'expected_result' => 0, },
+        { 'expression' => "3+2*5-2/2",       'expected_rpn' => "3 2 5 * + 2 2 / -",         'expected_result' => 12, },
         ];
 
     my $i = 0;
