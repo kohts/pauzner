@@ -129,13 +129,14 @@ void shunting_yard(char *expression, stack *out)
     stack_create(&in_tokenized_reversed, "input tokenized, reversed", in_tokenized.max_size);
     char *tmp_token;
 
-    // reverse input stack, convert array from infix to rpn
+    // reverse input stack
     while (stack_is_empty(&in_tokenized) == false) {
         tmp_token = stack_pop(&in_tokenized);
         stack_push(&in_tokenized_reversed, tmp_token);
     }
     stack_free(&in_tokenized);
 
+    // convert array from infix to rpn
     TOKEN: while (stack_is_empty(&in_tokenized_reversed) == false) {
         tmp_token = stack_pop(&in_tokenized_reversed);
 //        printf("%s\n", tmp_token);
@@ -278,6 +279,9 @@ bool shunting_yard_test()
         { "3+4*2/(1-5)^2^3", 3+1.0/8192 },
         { "1+-1", 0 },
         { "3+2*5-2/2", 12 },
+        { "2^3+3^2", 17 },
+        { "2^(3+1)-(1+1)*-1", 18 },
+        { "(((1)))", 1 },
     };
 
     bool failed = false;
@@ -338,6 +342,7 @@ int main(int argc, char *argv[]) {
 
         printf("expression: %s\n", expression);
         printf("value: %f\n", f);
+        free(expression);
     }
 
     return 0;
